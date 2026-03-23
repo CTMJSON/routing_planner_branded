@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Routing Planner – Visual Branching With Stepped Placement</title>
+  <link rel="stylesheet" href="drawflow.min.css" />
+  <style>
+    body { background: #182132; color: #fff; font-family: sans-serif; margin:0;}
+    #toolbar { padding:18px 32px; background:#25324a; }
+    #toolbar button, #toolbar select { font-size:16px; margin-right:12px; background:#01BDF6;color:#182132;border:none;border-radius:7px;padding:8px 18px; font-weight:bold; cursor:pointer;}
+    #toolbar select { padding:7px 8px;}
+    #toolbar button:hover { background:#16c8ff;}
+    #drawflow {
+      background:#25324a;
+      height: 76vh;
+      width: 98vw;
+      min-height:495px;
+      border-radius:12px;
+      box-shadow:0 6px 16px #1116;
+      overflow: auto;        /* <--- scrollbars enabled */
+      white-space: nowrap;   /* <--- allow wide layout */
+      position:relative;
+    }
+    .drawflow {
+      min-width: 2200px;
+      min-height: 1500px;
+    }
+    .drawflow-node.shape-rect   { border-radius: 7px; background: #ddeaff; }
+    .drawflow-node.shape-diamond { transform: rotate(45deg); width:110px !important; height:110px !important; border-radius:7px; background: #c4e0fa; }
+    .drawflow-node.shape-diamond .shape-inner { transform: rotate(-45deg); }
+    .drawflow-node.shape-circle  { border-radius: 50%; width:96px !important; height:96px !important; background: #ffeaef; }
+    .drawflow-node.shape-hex {
+      clip-path: polygon(25% 5%, 75% 5%, 100% 50%, 75% 95%, 25% 95%, 0% 50%);
+      width: 105px !important; height: 105px !important;
+      border: 2.5px solid #01BDF6;
+      background: #a1aaff;
+    }
+    .drawflow-node.shape-parallelogram {
+      transform: skew(20deg);
+      width: 110px !important; height: 65px !important; border-radius: 10px;
+      background: #f9dee5;
+    }
+    .drawflow-node.shape-octagon {
+      clip-path: polygon(30% 0%, 70% 0%, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0% 70%, 0% 30%);
+      width: 105px !important; height: 105px !important;
+      border: 2px solid #e2a;
+      background: #ce82fc;
+    }
+    .drawflow-node .shape-inner {
+      display: flex; align-items: center; justify-content: center; height: 100%; width: 100%; font-size:1.1rem;
+    }
+    .drawflow-node[data-type="TrackingNumber"]    { border:2.2px solid #1dace3!important; background:#68b6fa22;}
+    .drawflow-node[data-type="IVR"]               { border:2.2px solid #8b97f8!important; background:#d3d8f941;}
+    .drawflow-node[data-type="Queue"]             { border:2.2px solid #ffb4bb!important; background:#f9dee541;}
+    .drawflow-node[data-type="SmartRouter"]       { border:2.2px solid #ce82fc!important; background:#ede2fb;}
+    .drawflow-node[data-type="ReceivingNumber"]   { border:2.2px solid #5fd18a!important; background:#edf9ee;}
+    .drawflow-node[data-type="Voicemail"]         { border:2.2px solid #fac6a3!important; background:#fff4e6;}
+    .drawflow-node[data-type="NoAnswer"]          { border:2.2px dashed #e24343!important; background:#fbe6e6;}
+    .drawflow-node-label { font-weight:bold; color:#01BDF6; font-size:1.04em;outline:none; }
+    .drawflow .output:hover, .drawflow .input:hover { box-shadow: 0 0 7px 2px #01BDF6; }
+    #nodeMenu {
+      display:none; position:fixed; z-index:99; background:#222d40;
+      border:2px solid #01BDF6; border-radius:7px; color:#fff; min-width:188px; font-size:1rem;
+      box-shadow:0 2px 14px #111a;
+    }
+    #nodeMenu label { display:block; margin:14px 14px 7px 14px;}
+    #nodeMenu select { font-size:1rem;width:93%;margin:8px 3%;background:#25324a;color:#01BDF6;border-radius:5px;padding:5px 0;}
+    #nodeMenu button {margin:8px 0 12px 8px;background:#01BDF6;border-radius:6px;font-weight:bold;color:#182132;border:none;padding:7px 32px;cursor:pointer;}
+    #nodeMenu .cancel {background:#e24343;color:#fff;padding:7px 16px;}
+  </style>
+</head>
+<body>
+  <div id="toolbar">
+    <label>Node type:</label>
+    <select id="nodeType">
+      <option value="TrackingNumber">Tracking Number</option>
+      <option value="IVR">IVR Menu (3 paths)</option>
+      <option value="IVR5">IVR Menu (5 paths)</option>
+      <option value="IVR10">IVR Menu (10 paths)</option>
+      <option value="Queue">Queue</option>
+      <option value="SmartRouter">Smart Router</option>
+      <option value="ReceivingNumber">Receiving Number</option>
+      <option value="Voicemail">Voicemail</option>
+      <option value="NoAnswer">No Answer Branch</option>
+    </select>
+    <button onclick="addNodeStandalone()">+ Add Standalone Node</button>
+    <button onclick="saveFlow()">💾 Save</button>
+    <button onclick="loadFlow()">📂 Load</button>
+    <input type="file" id="fileInput" style="display:none;" accept="application/json" onchange="handleFile(event)">
+    <span style="font-size:13px;color:#90bee5;">Drag from outputs, or <b>click output port</b> to branch/add and connect a new node, shapes auto by step; scrollbars for large flows.</span>
+  </div>
+  <div id="drawflow"></div>
+  <div id="nodeMenu">
+    <label for="nodeMenuSelect">Select step type:</label>
+    <select id="nodeMenuSelect"></select>
+    <button id="nodeMenuAddBtn">Add</button>
+    <button class="cancel" id="nodeMenuCancelBtn">Cancel</button>
+  </div>
+<script src="drawflow.min.js"></script>
+<script>
+  const labelMap = {
+    TrackingNumber: "Tracking Number",
+    IVR5: "IVR Menu (5 paths)",
+    IVR10: "IVR Menu (10 paths)",
+    IVR: "IVR Menu",
+    Queue: "Queue",
+    SmartRouter: "Smart Router",
+    ReceivingNumber: "Receiving Number",
+    Voicemail: "Voicemail",
+    NoAnswer: "No Answer Branch"
+  };
+  const SHAPE_CLASSES = [
+    "shape-rect", "shape-diamond", "shape-circle", "shape-hex", "shape-parallelogram", "shape-octagon"
+  ];
+  function getShapeClassByDepth(depth) {
+    return SHAPE_CLASSES[(depth-1) % SHAPE_CLASSES.length];
+  }
+  const NODE_TYPES = [
+    { value: "IVR", label: "IVR Menu" },
+    { value: "Queue", label: "Queue" },
+    { value: "SmartRouter", label: "Smart Router" },
+    { value: "ReceivingNumber", label: "Receiving Number" },
+    { value: "Voicemail", label: "Voicemail" },
+    { value: "NoAnswer", label: "No Answer Branch" }
+  ];
+  const editor = new Drawflow(document.getElementById('drawflow'));
+  editor.reroute = true;
+  editor.start();
+  document.getElementById('drawflow').style.height = (window.innerHeight-80) + 'px';
+  // Keyboard node deletion support
+  document.addEventListener('keydown', function(e) {
+    // Only delete if a node is selected and focus is not in text editing fields
+    if ((e.key === "Delete" || e.key === "Backspace") &&
+        document.activeElement.tagName !== 'INPUT' &&
+        document.activeElement.tagName !== 'TEXTAREA') {
+      const selected = editor.getSelectedNodes();
+      if(selected && selected.length > 0) {
+        selected.forEach(id => editor.removeNodeId(id));
+      }
+    }
+  });
+  let nodeCount = {
+    TrackingNumber:1, IVR:1, Queue:1, SmartRouter:1,
+    ReceivingNumber:1, Voicemail:1, NoAnswer:1
+  };
+  function addNodeStandalone() {
+    const type = document.getElementById('nodeType').value;
+    addNodeWithDepth(type, null, null); 
+  }
+  function addNodeWithDepth(type, parentOutNodeId, fromOutputIdx) {
+    const defaultName = labelMap[type] + ' ' + nodeCount[type]++;
+    let outputs = 1, inputs = 1;
+    if(type === 'TrackingNumber') { outputs = 1; inputs = 0; }
+    else if(type === 'IVR') { outputs = 3; inputs = 1; }
+    else if(type === 'IVR5') { outputs = 5; inputs = 1; }
+    else if(type === 'IVR10') { outputs = 10; inputs = 1; }
+    else if(type === 'SmartRouter') { outputs = 3; inputs = 1; }
+    else if(type === 'NoAnswer') { outputs = 1; inputs = 1; }
+    let depth = 1;
+    let x = 300, y = 120;
+    if (parentOutNodeId !== null) {
+      try {
+        const parentNode = editor.getNodeFromId(parentOutNodeId);
+        depth = (parentNode.data.depth || 1) + 1;
+        // Deterministic: to right and down
+        x = parentNode.pos_x + 220;
+        y = parentNode.pos_y + (depth * 32);
+      } catch { depth = 2; }
+    }
+    let shapeClass = getShapeClassByDepth(depth);
+    const html = `<div data-type="${type}" style="height:78px">
+        <div class="shape-inner"><span class="drawflow-node-label" ondblclick="editLabel(this)">${defaultName}</span></div>
+      </div>`;
+    const newNodeId = editor.addNode(
+      String(type),
+      inputs,
+      outputs,
+      x,
+      y,
+      shapeClass,
+      { type: String(type), label: String(defaultName), depth },
+      html
+    );
+    if (parentOutNodeId !== null && fromOutputIdx && Number(fromOutputIdx) > 0) {
+      editor.addConnection(parentOutNodeId, newNodeId, "output_" + fromOutputIdx, "input_1");
+    }
+  }
+  // Double-click label to edit inline
+  window.editLabel = function(spanElem) {
+    let old = spanElem.textContent;
+    let inp = document.createElement('input');
+    inp.type = 'text'; inp.value = old; inp.className='drawflow-node-label';
+    inp.onblur = inp.onkeydown = function(e) {
+      if(e.type==='blur' || (e.type==='keydown'&&e.key==='Enter')) {
+        spanElem.textContent = inp.value||old;
+        spanElem.style.display="inline";
+        inp.remove();
+      }
+    };
+    spanElem.parentNode.insertBefore(inp, spanElem);
+    spanElem.style.display="none";
+    inp.focus();
+    inp.setSelectionRange(0, old.length);
+  };
+  function getName() {
+    let d = new Date();
+    return "ctm_routing_"+d.getFullYear()+"-"+(d.getMonth()+1)+"-"+d.getDate()+"_"+d.getHours()+"-"+d.getMinutes()+".json";
+  }
+  function saveFlow() {
+    const flow = editor.export();
+    const blob = new Blob([JSON.stringify(flow,null,2)], {type: "application/json"});
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = getName();
+    document.body.appendChild(a);
+    a.click(); document.body.removeChild(a);
+  }
+  function loadFlow() {
+    document.getElementById('fileInput').value = null;
+    document.getElementById('fileInput').click();
+  }
+  function handleFile(evt) {
+    const file = evt.target.files[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      try {
+        const obj = JSON.parse(e.target.result);
+        for (let k in obj.drawflow.Home.data) {
+          let n = obj.drawflow.Home.data[k];
+          if (typeof n.name !== 'string') n.name = String(n.name || '');
+        }
+        editor.clear();
+        editor.import(obj);
+      } catch (ex) {
+        alert("Failed to load: "+ex);
+      }
+    }
+    reader.readAsText(file);
+  }
+  function showNodeMenu(x, y, parentId, outIndex) {
+    const menu = document.getElementById('nodeMenu');
+    const sel = document.getElementById('nodeMenuSelect');
+    sel.innerHTML = NODE_TYPES.map(t=>`<option value="${t.value}">${t.label}</option>`).join('');
+    menu.style.left = (x+12) + 'px';
+    menu.style.top = (y-10) + 'px';
+    menu.style.display = 'block';
+    menu.parentId = parentId;
+    menu.outIndex = outIndex;
+    sel.focus();
+  }
+  function hideNodeMenu() {
+    const menu = document.getElementById('nodeMenu');
+    menu.style.display = 'none';
+    menu.parentId = undefined;
+    menu.outIndex = undefined;
+  }
+  document.getElementById('nodeMenuAddBtn').onclick = function() {
+    const menu = document.getElementById('nodeMenu');
+    const type = document.getElementById('nodeMenuSelect').value;
+    if(menu.parentId && type) {
+      addNodeWithDepth(type, Number(menu.parentId), Number(menu.outIndex));
+    }
+    hideNodeMenu();
+  };
+  document.getElementById('nodeMenuCancelBtn').onclick = hideNodeMenu;
+  editor.precanvas.addEventListener("click", function(e) {
+    if (e.target.classList.contains("output")) {
+      const parentNodeDiv = e.target.closest(".drawflow-node");
+      const parentId = parseInt(parentNodeDiv.id.replace("node-", ""));
+      const outputsOnThisNode = Array.from(parentNodeDiv.querySelectorAll('.output'));
+      const outIndex = outputsOnThisNode.indexOf(e.target) + 1;
+      let rect = e.target.getBoundingClientRect();
+      showNodeMenu(rect.right, rect.top, parentId, outIndex);
+      e.stopPropagation();
+    }
+  });
+  document.body.addEventListener("mousedown", function(e) {
+    const menu = document.getElementById('nodeMenu');
+    if(menu.style.display=="block" && !menu.contains(e.target)) hideNodeMenu();
+  });
+  function snapAllNodesToGrid() {
+    const grid = 32;
+    Object.values(editor.drawflow.drawflow.Home.data).forEach(function(n) {
+      let node = document.getElementById('node-' + n.id);
+      if (node) {
+        let l = parseInt(node.style.left), t = parseInt(node.style.top);
+        node.style.left = (Math.round(l / grid) * grid) + 'px';
+        node.style.top  = (Math.round(t / grid) * grid) + 'px';
+        n.pos_x = parseInt(node.style.left);
+        n.pos_y = parseInt(node.style.top);
+      }
+    });
+  }
+  editor.on('nodeMoved', function() { setTimeout(snapAllNodesToGrid, 10); });
+  editor.on('import', function() { setTimeout(snapAllNodesToGrid, 100); });
+</script>
+</body>
+</html>
