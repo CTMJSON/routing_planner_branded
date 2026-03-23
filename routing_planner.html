@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>Routing Planner – Visual Branching With Stepped Placement</title>
+  <title>CTM Routing Planner – Visual Call Flow Designer</title>
   <link rel="stylesheet" href="drawflow.min.css" />
   <style>
     body { background: #182132; color: #fff; font-family: sans-serif; margin:0;}
@@ -10,6 +10,7 @@
     #toolbar button, #toolbar select { font-size:16px; margin-right:12px; background:#01BDF6;color:#182132;border:none;border-radius:7px;padding:8px 18px; font-weight:bold; cursor:pointer;}
     #toolbar select { padding:7px 8px;}
     #toolbar button:hover { background:#16c8ff;}
+    #toolbar .end-actions-btn { background:#5fd18a;font-size:12px;padding:4px 10px;margin-left:8px;}
     #drawflow {
       background:#25324a;
       height: 76vh;
@@ -143,18 +144,38 @@
     #nodeMenu select { font-size:1rem;width:93%;margin:8px 3%;background:#25324a;color:#01BDF6;border-radius:5px;padding:5px 0;}
     #nodeMenu button {margin:8px 0 12px 8px;background:#01BDF6;border-radius:6px;font-weight:bold;color:#182132;border:none;padding:7px 32px;cursor:pointer;}
     #nodeMenu .cancel {background:#e24343;color:#fff;padding:7px 16px;}
+    #endActionsPanel { display:none; position:fixed; z-index:999; left:50%; top:50%; transform:translate(-50%,-50%); background:#25324a; border:2px solid #01BDF6; border-radius:10px; padding:20px; width:450px; max-height:80vh; overflow-y:auto; color:#fff; box-shadow:0 4px 30px rgba(0,0,0,0.5); }
+    #endActionsPanel h3 { margin:0 0 15px 0; color:#01BDF6; border-bottom:1px solid #01BDF6; padding-bottom:10px; }
+    #endActionsPanel .action-row { margin-bottom:12px; padding:10px; background:#1a2639; border-radius:6px; }
+    #endActionsPanel .action-row label { display:block; margin-bottom:6px; color:#8ecff7; font-size:0.9rem; }
+    #endActionsPanel .action-row input, #endActionsPanel .action-row select { width:95%; padding:6px; border-radius:4px; border:1px solid #01BDF6; background:#26344c; color:#fff; }
+    #endActionsPanel .action-type { display:flex; gap:10px; margin-bottom:10px; }
+    #endActionsPanel .action-type label { background:#1a2639; padding:8px 12px; border-radius:5px; cursor:pointer; flex:1; text-align:center; }
+    #endActionsPanel .action-type input[type="radio"] { display:none; }
+    #endActionsPanel .action-type input[type="radio"]:checked + span { color:#01BDF6; font-weight:bold; }
+    #endActionsPanel .action-type label:has(input:checked) { background:#01BDF6; color:#182132; }
+    #endActionsPanel .action-btn { background:#01BDF6; color:#182132; border:none; padding:8px 16px; border-radius:5px; cursor:pointer; font-weight:bold; margin-right:10px; }
+    #endActionsPanel .cancel-btn { background:#e24343; color:#fff; }
+    #endActionsPanel .remove-action { background:#e24343; color:#fff; border:none; padding:4px 8px; border-radius:3px; cursor:pointer; font-size:0.8rem; margin-top:5px; }
+    #endActionsPanel .add-action-btn { background:#5fd18a; color:#182132; border:none; padding:8px 16px; border-radius:5px; cursor:pointer; font-weight:bold; margin-top:10px; }
   </style>
 </head>
 <body>
   <div id="toolbar">
+    <img src="https://media.ffycdn.net/us/calltrackingmetrics/t3NpdwJWaUv1pHS2PYiE.png?width=180" alt="CTM Routing Planner" style="height:40px;vertical-align:middle;margin-right:20px;">
     <label>Node type:</label>
     <select id="nodeType">
       <option value="TrackingNumber">Tracking Number</option>
       <option value="IVR">IVR Menu (3 paths)</option>
       <option value="IVR5">IVR Menu (5 paths)</option>
       <option value="IVR10">IVR Menu (10 paths)</option>
+      <option value="IVR15">IVR Menu (15 paths)</option>
+      <option value="IVR20">IVR Menu (20 paths)</option>
       <option value="Queue">Queue</option>
       <option value="SmartRouter">Smart Router</option>
+      <option value="SmartRouter5">Smart Router (5 paths)</option>
+      <option value="SmartRouter10">Smart Router (10 paths)</option>
+      <option value="SmartRouter15">Smart Router (15 paths)</option>
       <option value="ReceivingNumber">Receiving Number</option>
       <option value="Voicemail">Voicemail</option>
       <option value="NoAnswer">No Answer Branch</option>
@@ -172,17 +193,29 @@
     <button id="nodeMenuAddBtn">Add</button>
     <button class="cancel" id="nodeMenuCancelBtn">Cancel</button>
   </div>
+  <div id="endActionsPanel">
+    <h3>End Actions - Post-Call Automation</h3>
+    <div id="endActionsList"></div>
+    <button class="add-action-btn" onclick="addEndAction()">+ Add End Action</button>
+    <div style="margin-top:15px;text-align:right;">
+      <button class="action-btn" onclick="saveEndActions()">Save</button>
+      <button class="action-btn cancel-btn" onclick="closeEndActionsPanel()">Cancel</button>
+    </div>
+  </div>
 <script src="drawflow.min.js"></script>
 <script>
   const labelMap = {
     TrackingNumber: "Tracking Number",
     IVR5: "IVR Menu (5 paths)",
     IVR10: "IVR Menu (10 paths)",
+    IVR15: "IVR Menu (15 paths)",
+    IVR20: "IVR Menu (20 paths)",
     IVR: "IVR Menu",
     Queue: "Queue",
     SmartRouter: "Smart Router",
     SmartRouter5: "Smart Router (5 paths)",
     SmartRouter10: "Smart Router (10 paths)",
+    SmartRouter15: "Smart Router (15 paths)",
     ReceivingNumber: "Receiving Number",
     Voicemail: "Voicemail",
     NoAnswer: "No Answer Branch"
@@ -205,10 +238,13 @@
     { value: "IVR", label: "IVR Menu (3 paths)" },
     { value: "IVR5", label: "IVR Menu (5 paths)" },
     { value: "IVR10", label: "IVR Menu (10 paths)" },
+    { value: "IVR15", label: "IVR Menu (15 paths)" },
+    { value: "IVR20", label: "IVR Menu (20 paths)" },
     { value: "Queue", label: "Queue" },
     { value: "SmartRouter", label: "Smart Router (3 paths)" },
     { value: "SmartRouter5", label: "Smart Router (5 paths)" },
     { value: "SmartRouter10", label: "Smart Router (10 paths)" },
+    { value: "SmartRouter15", label: "Smart Router (15 paths)" },
     { value: "ReceivingNumber", label: "Receiving Number" },
     { value: "Voicemail", label: "Voicemail" },
     { value: "NoAnswer", label: "No Answer Branch" }
@@ -231,9 +267,9 @@
   });
   let nodeCount = {
     TrackingNumber:1,
-    IVR:1, IVR5:1, IVR10:1,
+    IVR:1, IVR5:1, IVR10:1, IVR15:1, IVR20:1,
     Queue:1,
-    SmartRouter:1, SmartRouter5:1, SmartRouter10:1,
+    SmartRouter:1, SmartRouter5:1, SmartRouter10:1, SmartRouter15:1,
     ReceivingNumber:1,
     Voicemail:1,
     NoAnswer:1
@@ -251,9 +287,12 @@
     else if(type === 'IVR') { outputs = 3; inputs = 1; }
     else if(type === 'IVR5') { outputs = 5; inputs = 1; }
     else if(type === 'IVR10') { outputs = 10; inputs = 1; }
+    else if(type === 'IVR15') { outputs = 15; inputs = 1; }
+    else if(type === 'IVR20') { outputs = 20; inputs = 1; }
     else if(type === 'SmartRouter') { outputs = 3; inputs = 1; }
     else if(type === 'SmartRouter5') { outputs = 5; inputs = 1; }
     else if(type === 'SmartRouter10') { outputs = 10; inputs = 1; }
+    else if(type === 'SmartRouter15') { outputs = 15; inputs = 1; }
     else if(type === 'NoAnswer') { outputs = 1; inputs = 1; }
     // DO NOT add extra outputs for notes (fully remove any lingering notes logic)
 
@@ -285,14 +324,14 @@
     // main node content with editable output labels for multi-output nodes
 
     let outputInputsHTML = '';
-    if(type === 'IVR' || type === 'IVR5' || type === 'IVR10' || type === 'SmartRouter' || type === 'SmartRouter5' || type === 'SmartRouter10') {
+    if(type === 'IVR' || type === 'IVR5' || type === 'IVR10' || type === 'IVR15' || type === 'IVR20' || type === 'SmartRouter' || type === 'SmartRouter5' || type === 'SmartRouter10' || type === 'SmartRouter15') {
       let restored = [];
       if(data.outputLabels && Array.isArray(data.outputLabels))
         restored = data.outputLabels;
       while(restored.length < outputs) restored.push('');
       const getPlaceholder = (type, i) =>
-        (type === 'IVR' || type === 'IVR5' || type === 'IVR10') ? `Keypress ${i+1}` :
-        (type === 'SmartRouter' || type === 'SmartRouter5' || type === 'SmartRouter10') ? `If ${i+1} is true then route here` :
+        (type === 'IVR' || type === 'IVR5' || type === 'IVR10' || type === 'IVR15' || type === 'IVR20') ? `Keypress ${i+1}` :
+        (type === 'SmartRouter' || type === 'SmartRouter5' || type === 'SmartRouter10' || type === 'SmartRouter15') ? `If ${i+1} is true then route here` :
         "";
       outputInputsHTML = `
         <div class='output-slot-list'>
@@ -313,10 +352,14 @@
     let notesHTML = `<textarea class="node-notes-field" placeholder="Enter notes or description here..." oninput="window.saveNodeNotes(this, this.closest('.drawflow-node').dataset.id)" rows="2">${notesValue}</textarea>`;
     let bgColor = COLOR_PALETTE[(depth - 1) % COLOR_PALETTE.length];
     const styleStr = `background:${bgColor}; height:auto;`;
+    const hasEndActions = (data.endActions && data.endActions.length > 0) ? '✓' : '';
     const html = `<div data-type="${type}">
       <div class="shape-inner"><span class="drawflow-node-label" ondblclick="editLabel(this)">${defaultName}</span></div>
       ${outputInputsHTML}
       ${notesHTML}
+      <div style="margin-top:8px;border-top:1px dashed #01BDF6;padding-top:6px;">
+        <button class="end-actions-btn" onclick="event.stopPropagation();window.showEndActionsPanel(${newNodeId})">⚡ End Actions ${hasEndActions}</button>
+      </div>
     </div>`;
     const newNodeId = editor.addNode(
       String(type),
@@ -478,6 +521,131 @@
   }
   editor.on('nodeMoved', function() { setTimeout(snapAllNodesToGrid, 10); });
   editor.on('import', function() { setTimeout(snapAllNodesToGrid, 100); });
+
+  // End Actions functionality
+  let currentEndActionsNodeId = null;
+  const END_ACTION_TYPES = [
+    { value: 'trigger', label: 'Trigger', icon: '⚡' },
+    { value: 'webhook', label: 'Webhook', icon: '🌐' },
+    { value: 'google_conversion', label: 'Google Ad Conversion', icon: '📊' },
+    { value: 'email_notification', label: 'Email Notification', icon: '📧' }
+  ];
+
+  window.showEndActionsPanel = function(nodeId) {
+    currentEndActionsNodeId = nodeId;
+    const node = editor.getNodeFromId(nodeId);
+    const actions = node.data.endActions || [];
+    renderEndActionsList(actions);
+    document.getElementById('endActionsPanel').style.display = 'block';
+  };
+
+  window.closeEndActionsPanel = function() {
+    document.getElementById('endActionsPanel').style.display = 'none';
+    currentEndActionsNodeId = null;
+  };
+
+  window.renderEndActionsList = function(actions) {
+    const container = document.getElementById('endActionsList');
+    if(actions.length === 0) {
+      container.innerHTML = '<p style="color:#8ecff7;text-align:center;">No end actions configured. Click "Add End Action" to add post-call automation.</p>';
+      return;
+    }
+    container.innerHTML = actions.map((action, idx) => `
+      <div class="action-row" data-idx="${idx}">
+        <div class="action-type">
+          ${END_ACTION_TYPES.map(t => `
+            <label>
+              <input type="radio" name="actionType_${idx}" value="${t.value}" ${action.type === t.value ? 'checked' : ''} onchange="updateActionType(${idx}, this.value)">
+              <span>${t.icon} ${t.label}</span>
+            </label>
+          `).join('')}
+        </div>
+        ${getActionFields(action.type, idx, action)}
+        <button class="remove-action" onclick="removeEndAction(${idx})">Remove</button>
+      </div>
+    `).join('');
+  };
+
+  window.getActionFields = function(type, idx, action) {
+    switch(type) {
+      case 'trigger':
+        return `
+          <label>Trigger Action:</label>
+          <select onchange="updateActionField(${idx}, 'trigger_action', this.value)">
+            <option value="">Select action...</option>
+            <option value="tag" ${action.trigger_action === 'tag' ? 'selected' : ''}>Add Tag</option>
+            <option value="remove_tag" ${action.trigger_action === 'remove_tag' ? 'selected' : ''}>Remove Tag</option>
+            <option value="set_schedule" ${action.trigger_action === 'set_schedule' ? 'selected' : ''}>Set Schedule</option>
+            <option value="transfer" ${action.trigger_action === 'transfer' ? 'selected' : ''}>Transfer Call</option>
+          </select>
+          <label>Tag ID / Value:</label>
+          <input type="text" value="${action.tag_value || ''}" onchange="updateActionField(${idx}, 'tag_value', this.value)" placeholder="Enter tag ID or value">
+        `;
+      case 'webhook':
+        return `
+          <label>Webhook URL:</label>
+          <input type="text" value="${action.webhook_url || ''}" onchange="updateActionField(${idx}, 'webhook_url', this.value)" placeholder="https://example.com/webhook">
+          <label>HTTP Method:</label>
+          <select onchange="updateActionField(${idx}, 'http_method', this.value)">
+            <option value="POST" ${action.http_method === 'POST' ? 'selected' : ''}>POST</option>
+            <option value="GET" ${action.http_method === 'GET' ? 'selected' : ''}>GET</option>
+          </select>
+        `;
+      case 'google_conversion':
+        return `
+          <label>Conversion Label:</label>
+          <input type="text" value="${action.conversion_label || ''}" onchange="updateActionField(${idx}, 'conversion_label', this.value)" placeholder="Conversion label from Google Ads">
+          <label>Conversion Value (optional):</label>
+          <input type="number" value="${action.conversion_value || ''}" onchange="updateActionField(${idx}, 'conversion_value', this.value)" placeholder="0.00">
+        `;
+      case 'email_notification':
+        return `
+          <label>Recipients (comma separated):</label>
+          <input type="text" value="${action.recipients || ''}" onchange="updateActionField(${idx}, 'recipients', this.value)" placeholder="email@example.com">
+          <label>Subject:</label>
+          <input type="text" value="${action.subject || ''}" onchange="updateActionField(${idx}, 'subject', this.value)" placeholder="Call notification subject">
+          <label>Include Call Details:</label>
+          <input type="checkbox" ${action.include_details ? 'checked' : ''} onchange="updateActionField(${idx}, 'include_details', this.checked)"> Include caller info, duration, recording
+        `;
+      default:
+        return '<p>Select an action type</p>';
+    }
+  };
+
+  window.updateActionType = function(idx, type) {
+    const node = editor.getNodeFromId(currentEndActionsNodeId);
+    let actions = node.data.endActions || [];
+    actions[idx].type = type;
+    node.data.endActions = actions;
+    renderEndActionsList(actions);
+  };
+
+  window.updateActionField = function(idx, field, value) {
+    const node = editor.getNodeFromId(currentEndActionsNodeId);
+    let actions = node.data.endActions || [];
+    actions[idx][field] = value;
+    node.data.endActions = actions;
+  };
+
+  window.addEndAction = function() {
+    const node = editor.getNodeFromId(currentEndActionsNodeId);
+    let actions = node.data.endActions || [];
+    actions.push({ type: 'trigger', trigger_action: '', tag_value: '', webhook_url: '', http_method: 'POST', conversion_label: '', conversion_value: '', recipients: '', subject: '', include_details: true });
+    node.data.endActions = actions;
+    renderEndActionsList(actions);
+  };
+
+  window.removeEndAction = function(idx) {
+    const node = editor.getNodeFromId(currentEndActionsNodeId);
+    let actions = node.data.endActions || [];
+    actions.splice(idx, 1);
+    node.data.endActions = actions;
+    renderEndActionsList(actions);
+  };
+
+  window.saveEndActions = function() {
+    closeEndActionsPanel();
+  };
 </script>
 </body>
 </html>
