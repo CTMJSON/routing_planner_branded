@@ -2,482 +2,1682 @@
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>Routing Planner – Visual Branching With Stepped Placement</title>
+  <title>CTM Routing Planner – Visual Call Flow Designer</title>
   <link rel="stylesheet" href="drawflow.min.css" />
   <style>
-    body { background: #182132; color: #fff; font-family: sans-serif; margin:0;}
-    #toolbar { padding:18px 32px; background:#25324a; }
-    #toolbar button, #toolbar select { font-size:16px; margin-right:12px; background:#01BDF6;color:#182132;border:none;border-radius:7px;padding:8px 18px; font-weight:bold; cursor:pointer;}
-    #toolbar select { padding:7px 8px;}
-    #toolbar button:hover { background:#16c8ff;}
-    #drawflow {
-      background:#25324a;
-      height: 76vh;
-      width: 98vw;
-      min-height:495px;
-      border-radius:12px;
-      box-shadow:0 6px 16px #1116;
-      overflow: auto;        /* <--- scrollbars enabled */
-      white-space: nowrap;   /* <--- allow wide layout */
-      position:relative;
+    * { box-sizing: border-box; }
+    body { background: #182132; color: #fff; font-family: sans-serif; margin:0; height:100vh; display:flex; flex-direction:column; overflow:hidden; }
+
+    /* ── Toolbar ── */
+    #toolbar { padding:10px 20px; background:#25324a; display:flex; flex-wrap:wrap; align-items:center; gap:8px; flex-shrink:0; border-bottom:1px solid #1a2740; }
+    #toolbar img { height:34px; }
+    #toolbar label { font-size:12px; color:#90bee5; white-space:nowrap; }
+    #toolbar select { font-size:13px; background:#1a2639; color:#01BDF6; border:1px solid #01BDF6; border-radius:6px; padding:5px 8px; cursor:pointer; }
+    #toolbar button { font-size:12px; background:#01BDF6; color:#182132; border:none; border-radius:6px; padding:6px 12px; font-weight:bold; cursor:pointer; white-space:nowrap; }
+    #toolbar button:hover { background:#16c8ff; }
+    #toolbar .btn-arrange { background:#a259db; color:#fff; }
+    #toolbar .btn-arrange:hover { background:#b870f0; }
+    #toolbar .btn-generate { background:#5fd18a; color:#182132; }
+    #toolbar .btn-generate:hover { background:#7fe0a0; }
+    .toolbar-hint { font-size:11px; color:#5a7a9a; margin-left:auto; }
+
+    /* ── Canvas ── */
+    #drawflow-wrap { flex:1; overflow:hidden; padding:8px; }
+    #drawflow { background:#1e2d42; height:100%; width:100%; border-radius:12px; box-shadow:0 6px 16px #1116; position:relative; overflow:hidden; }
+    .drawflow { min-width:4000px; min-height:2400px; }
+
+    /* ── Node base ── */
+    .drawflow-node { border-radius:8px; min-width:210px; max-width:250px; padding:0!important; }
+    .drawflow-node[data-node="TrackingNumber"] { border:2px solid #1dace3!important; background:#152233; }
+    .drawflow-node[data-node="IVR"]            { border:2px solid #8b97f8!important; background:#1c1f3a; }
+    .drawflow-node[data-node="Queue"]          { border:2px solid #e07090!important; background:#251525; }
+    .drawflow-node[data-node="SmartRouter"]    { border:2px solid #a259db!important; background:#1e1530; }
+    .drawflow-node[data-node="ReceivingNumber"]{ border:2px solid #5fd18a!important; background:#152520; }
+    .drawflow-node[data-node="Voicemail"]      { border:2px solid #fac6a3!important; background:#251d12; }
+    .drawflow-node[data-node="NoAnswer"]       { border:2px dashed #e24343!important; background:#251515; }
+    .drawflow-node[data-node="EndAction"]      { border:2px solid #5fd18a!important; background:#152520; }
+    .drawflow .output:hover, .drawflow .input:hover { box-shadow:0 0 7px 2px #01BDF6; }
+
+    /* Override Drawflow's default background:red selected state */
+    .drawflow .drawflow-node.selected {
+      background: inherit !important;
+      outline: 2px solid rgba(1,189,246,0.55) !important;
+      box-shadow: 0 0 0 4px rgba(1,189,246,0.1), 0 0 20px rgba(1,189,246,0.08) !important;
     }
-    .drawflow {
-      min-width: 2200px;
-      min-height: 1500px;
+
+    /* ── Node inner layout ── */
+    .node-inner { padding:10px 12px 6px 12px; }
+    .node-type-badge { font-size:9px; font-weight:900; letter-spacing:.08em; text-transform:uppercase; color:#5a7a9a; margin-bottom:3px; }
+    .drawflow-node-label { font-weight:bold; color:#e8f0ff; font-size:.95rem; display:block; word-break:break-word; line-height:1.3; margin-bottom:4px; cursor:pointer; }
+    .drawflow-node-label:hover { color:#01BDF6; }
+
+    /* config summary badge */
+    .node-config-summary { min-height:16px; margin-bottom:4px; }
+    .config-badge { font-size:.72rem; color:#a0c0e0; background:#1a2a3a; border-radius:3px; padding:2px 5px; display:inline-block; line-height:1.4; }
+    .config-badge.configured { color:#5fd18a; background:#1a2e20; }
+
+    /* output labels */
+    .output-slot-list { display:flex; flex-direction:column; gap:3px; margin-bottom:4px; }
+    .output-slot-row { display:flex; align-items:center; }
+    .output-label-txt { width:100%; font-size:.8rem; background:#1a2639; color:#8ecff7; border:1px solid #2a3d55; border-radius:4px; padding:2px 5px; }
+    .output-label-txt::placeholder { color:#3a5570; }
+    .add-path-btn { background:#3a6a40; color:#a0e8a0; border:1px solid #5fd18a; padding:2px 8px; border-radius:4px; cursor:pointer; font-size:.75rem; font-weight:bold; margin-top:2px; align-self:flex-start; }
+    .add-path-btn:hover { background:#5fd18a; color:#182132; }
+
+    /* notes */
+    .node-notes-field { width:100%; min-height:32px; max-height:70px; font-size:.78rem; border-radius:4px; background:#141e2c; color:#8090a0; padding:3px 6px; border:1px dashed #2a3d55; resize:vertical; outline:none; font-family:inherit; line-height:1.2; margin-top:3px; display:block; }
+    .node-notes-field:focus { border-color:#01BDF6; color:#aac4d8; }
+
+    /* node footer buttons */
+    .node-footer { display:flex; gap:0; border-top:1px solid #1a2a3a; margin-top:6px; }
+    .node-footer-btn { flex:1; background:transparent; color:#5a7a9a; border:none; border-right:1px solid #1a2a3a; padding:5px 4px; cursor:pointer; font-size:.72rem; font-weight:bold; text-align:center; transition:all .15s; }
+    .node-footer-btn:last-child { border-right:none; }
+    .node-footer-btn:hover { background:#1a2a3a; color:#01BDF6; }
+    .node-footer-btn.configured { color:#5fd18a; }
+    .node-footer-btn.end-actions-btn.has-actions { color:#5fd18a; }
+    .node-footer-btn.end-actions-btn.has-actions:hover { background:#1a2e20; }
+    .node-footer-btn.copy-btn { flex:0 0 28px; font-size:.9rem; color:#4a6a8a; }
+    .node-footer-btn.copy-btn:hover { color:#01BDF6; }
+
+    /* ── Node context menu ── */
+    #nodeMenu { display:none; position:fixed; z-index:99; background:#1a2535; border:1.5px solid #01BDF6; border-radius:8px; color:#fff; min-width:190px; font-size:.9rem; box-shadow:0 4px 20px #0009; padding:12px; }
+    #nodeMenu label { display:block; margin-bottom:5px; color:#8ecff7; font-size:.8rem; }
+    #nodeMenu select { font-size:.9rem; width:100%; margin-bottom:10px; background:#1a2639; color:#01BDF6; border:1px solid #01BDF6; border-radius:5px; padding:5px; }
+    #nodeMenu .menu-btns { display:flex; gap:8px; }
+    #nodeMenu .menu-btns button { flex:1; padding:5px 8px; border:none; border-radius:5px; cursor:pointer; font-weight:bold; font-size:.82rem; }
+    #nodeMenu .add-btn { background:#01BDF6; color:#182132; }
+    #nodeMenu .cancel-btn { background:#e24343; color:#fff; }
+
+    /* ── Shared modal base ── */
+    .modal-overlay { display:none; position:fixed; z-index:998; inset:0; background:rgba(0,0,0,.5); }
+    .modal-box { position:fixed; z-index:999; left:50%; top:50%; transform:translate(-50%,-50%); background:#1a2535; border:1.5px solid #01BDF6; border-radius:10px; color:#fff; box-shadow:0 6px 40px rgba(0,0,0,.7); }
+    .modal-box h3 { margin:0 0 14px; color:#01BDF6; border-bottom:1px solid #01BDF633; padding-bottom:10px; font-size:1rem; }
+    .modal-header { padding:18px 20px 0; }
+    .modal-body { padding:0 20px; max-height:65vh; overflow-y:auto; }
+    .modal-footer { padding:12px 20px 16px; border-top:1px solid #1a2a3a; display:flex; gap:8px; justify-content:flex-end; }
+    .modal-footer button { padding:7px 16px; border:none; border-radius:5px; cursor:pointer; font-weight:bold; font-size:.85rem; }
+    .btn-save { background:#01BDF6; color:#182132; }
+    .btn-cancel { background:#2a3d55; color:#aaa; }
+    .btn-add { background:#5fd18a; color:#182132; }
+
+    /* ── End Actions Panel ── */
+    #endActionsPanel { width:500px; }
+    .action-row { margin-bottom:10px; padding:10px 12px; background:#111c2a; border-radius:6px; border:1px solid #2a3a50; }
+    .action-type-tabs { display:flex; gap:5px; margin-bottom:8px; flex-wrap:wrap; }
+    .action-type-tabs label { background:#1a2a3a; padding:4px 9px; border-radius:4px; cursor:pointer; font-size:.75rem; border:1px solid #2a3d55; }
+    .action-type-tabs input[type="radio"] { display:none; }
+    .action-type-tabs label:has(input:checked) { background:#01BDF6; color:#182132; border-color:#01BDF6; font-weight:bold; }
+    .action-field { margin-bottom:7px; }
+    .action-field label { display:block; margin-bottom:2px; color:#7090b0; font-size:.75rem; }
+    .action-field input,.action-field select,.action-field textarea { width:100%; padding:5px 7px; border-radius:4px; border:1px solid #2a3a50; background:#111c2a; color:#ddeeff; font-size:.82rem; }
+    .action-field input:focus,.action-field select:focus,.action-field textarea:focus { outline:none; border-color:#01BDF6; }
+    .action-field textarea { font-family:monospace; resize:vertical; }
+    .action-field .checkbox-row { display:flex; align-items:center; gap:7px; margin-top:3px; }
+    .action-field .checkbox-row input[type="checkbox"] { width:auto; }
+    .action-field .checkbox-row label { margin:0; color:#99b; }
+    .remove-action-btn { background:#6a2020; color:#e08080; border:1px solid #903030; padding:3px 8px; border-radius:4px; cursor:pointer; font-size:.72rem; margin-top:4px; }
+    .remove-action-btn:hover { background:#e24343; color:#fff; }
+    .empty-actions { color:#5a7a9a; text-align:center; padding:20px 0; font-size:.85rem; }
+
+    /* ── Node Config Panel ── */
+    #nodeConfigPanel { width:480px; }
+    .config-section { margin-bottom:6px; }
+    .config-field { margin-bottom:8px; }
+    .config-field label { display:block; margin-bottom:3px; color:#7090b0; font-size:.78rem; font-weight:600; }
+    .config-field input,.config-field select,.config-field textarea {
+      width:100%; padding:6px 8px; border-radius:4px; border:1px solid #2a3a50;
+      background:#111c2a; color:#ddeeff; font-size:.85rem;
     }
-    .drawflow-node.shape-rect   { border-radius: 7px; background: #ddeaff; }
-    .drawflow-node.shape-trapezoid {
-      clip-path: polygon(18% 0%, 82% 0%, 100% 100%, 0% 100%);
-      width: 170px !important;
-      height: 100px !important;
-      background: #c4e0fa;
-      border-radius: 12px;
-    }
-    .drawflow-node.shape-circle  { border-radius: 50%; width:170px !important; height:170px !important; background: #ffeaef; }
-    .drawflow-node.shape-circle .output-labels-vertlist { position: relative; top: 10px; left: 0; display: flex; flex-direction: column; align-items: center; }
-    .drawflow-node.shape-hex {
-      clip-path: polygon(25% 5%, 75% 5%, 100% 50%, 75% 95%, 25% 95%, 0% 50%);
-      width: 105px !important; height: 105px !important;
-      border: 2.5px solid #01BDF6;
-      background: #a1aaff;
-    }
-    .drawflow-node.shape-parallelogram {
-      transform: skew(20deg);
-      width: 110px !important; height: 65px !important; border-radius: 10px;
-      background: #f9dee5;
-    }
-    .drawflow-node.shape-octagon {
-      clip-path: polygon(30% 0%, 70% 0%, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0% 70%, 0% 30%);
-      width: 105px !important; height: 105px !important;
-      border: 2px solid #e2a;
-      background: #ce82fc;
-    }
-    .drawflow-node .shape-inner {
-      display: flex; align-items: center; justify-content: center; height: 100%; width: 100%; font-size:1.1rem;
-    }
-    .drawflow-node {
-      max-width: 220px;
-      min-width: 105px;
-      min-height: 140px;
-      padding-bottom: 30px; /* Ensure space at node bottom for output port */
-    }
-    .drawflow-node[data-type="TrackingNumber"]    { border:2.2px solid #1dace3!important; background:#68b6fa22;}
-    .drawflow-node[data-type="IVR"]               { border:2.2px solid #8b97f8!important; background:#d3d8f941;}
-    .drawflow-node[data-type="Queue"]             { border:2.2px solid #ffb4bb!important; background:#f9dee541;}
-    .drawflow-node[data-type="SmartRouter"]       { border:2.2px solid #ce82fc!important; background:#ede2fb;}
-    .drawflow-node[data-type="ReceivingNumber"]   { border:2.2px solid #5fd18a!important; background:#edf9ee;}
-    .drawflow-node[data-type="Voicemail"]         { border:2.2px solid #fac6a3!important; background:#fff4e6;}
-    .drawflow-node[data-type="NoAnswer"]          { border:2.2px dashed #e24343!important; background:#fbe6e6;}
-    .drawflow-node-label {
-      font-weight: bold;
-      color: #01BDF6;
-      font-size: 1.04em;
-      outline: none;
-      white-space: normal;
-      word-break: break-word;
-      max-width: 160px;
-      display: inline-block;
-      line-height: 1.1;
-    }
-    .drawflow .output:hover, .drawflow .input:hover { box-shadow: 0 0 7px 2px #01BDF6; }
-    .output-slot-list {
-      display: flex;
-      flex-direction: column;
-      justify-content: flex-start;
-      min-height: 0;
-      margin-bottom: 12px;
-      gap: 4px;
-    }
-    .output-slot-row {
-      display: flex;
-      align-items: center;
-      flex: 1 1 0;
-      height: 24px;
-      margin: 0;
-    }
-    .output-label-txt {
-      width: 76%;
-      font-size: 0.93em;
-      background: #26344c;
-      color: #8ecff7;
-      border: 1px solid #01BDF6;
-      border-radius: 4px;
-      padding: 2px 4px;
-      margin-right: 2px;
-    }
-    .node-notes-field {
-      margin-top: 16px;
-      width: 98%;
-      min-height: 38px;
-      max-height: 120px;
-      z-index: 2;
-      position: relative;
-      display: block;
-      clear: both;
-      width: 98%;
-      min-height: 38px;
-      max-height: 95px;
-      margin-top: 7px;
-      font-size: 1em;
-      border-radius: 6px;
-      background: #ffffe9;
-      color: #555;
-      padding: 6px 7px;
-      border: 1.7px dashed #98d;
-      resize: vertical;
-      box-sizing: border-box;
-      outline: none;
-      font-family: inherit;
-      line-height: 1.2;
-    }
-    .node-notes-field:focus {
-      border-color: #21bdf6;
-      background: #fffbe4;
-    }
-    #nodeMenu {
-      display:none; position:fixed; z-index:99; background:#222d40;
-      border:2px solid #01BDF6; border-radius:7px; color:#fff; min-width:188px; font-size:1rem;
-      box-shadow:0 2px 14px #111a;
-    }
-    #nodeMenu label { display:block; margin:14px 14px 7px 14px;}
-    #nodeMenu select { font-size:1rem;width:93%;margin:8px 3%;background:#25324a;color:#01BDF6;border-radius:5px;padding:5px 0;}
-    #nodeMenu button {margin:8px 0 12px 8px;background:#01BDF6;border-radius:6px;font-weight:bold;color:#182132;border:none;padding:7px 32px;cursor:pointer;}
-    #nodeMenu .cancel {background:#e24343;color:#fff;padding:7px 16px;}
+    .config-field input:focus,.config-field select:focus,.config-field textarea:focus { outline:none; border-color:#01BDF6; }
+    .config-field textarea { resize:vertical; font-family:inherit; }
+    .config-field .checkbox-row { display:flex; align-items:center; gap:8px; margin-top:3px; }
+    .config-field .checkbox-row input[type="checkbox"] { width:auto; }
+    .config-field .checkbox-row label { margin:0; color:#99aabb; font-size:.82rem; }
+    .config-field .field-hint { font-size:.7rem; color:#4a6a8a; margin-top:2px; }
+    .config-section-title { font-size:.7rem; font-weight:900; text-transform:uppercase; letter-spacing:.08em; color:#4a6a8a; margin:12px 0 6px; border-top:1px solid #1a2a3a; padding-top:8px; }
   </style>
 </head>
 <body>
   <div id="toolbar">
+    <img src="https://media.ffycdn.net/us/calltrackingmetrics/6CpdkYmzxL6U2TMLMKCo.png?width=180" alt="CTM">
     <label>Node type:</label>
     <select id="nodeType">
       <option value="TrackingNumber">Tracking Number</option>
-      <option value="IVR">IVR Menu (3 paths)</option>
-      <option value="IVR5">IVR Menu (5 paths)</option>
-      <option value="IVR10">IVR Menu (10 paths)</option>
+      <option value="IVR">IVR Menu</option>
       <option value="Queue">Queue</option>
       <option value="SmartRouter">Smart Router</option>
       <option value="ReceivingNumber">Receiving Number</option>
       <option value="Voicemail">Voicemail</option>
       <option value="NoAnswer">No Answer Branch</option>
+      <option value="EndAction">End Action</option>
     </select>
-    <button onclick="addNodeStandalone()">+ Add Standalone Node</button>
+    <button onclick="addNodeStandalone()">+ Add Node</button>
     <button onclick="saveFlow()">💾 Save</button>
     <button onclick="loadFlow()">📂 Load</button>
+    <button class="btn-arrange" onclick="autoArrange()">⚡ Auto Arrange</button>
+    <button class="btn-generate" onclick="generatePythonScript()">🐍 Generate Script</button>
     <input type="file" id="fileInput" style="display:none;" accept="application/json" onchange="handleFile(event)">
-    <span style="font-size:13px;color:#90bee5;">Drag from outputs, or <b>click output port</b> to branch/add and connect a new node, shapes auto by step; scrollbars for large flows.</span>
+    <span class="toolbar-hint">Click an output port to branch · Double-click label to rename</span>
   </div>
-  <div id="drawflow"></div>
+  <div id="drawflow-wrap">
+    <div id="drawflow"></div>
+  </div>
+
+  <!-- Node context menu -->
   <div id="nodeMenu">
-    <label for="nodeMenuSelect">Select step type:</label>
+    <label>Connect to new node:</label>
     <select id="nodeMenuSelect"></select>
-    <button id="nodeMenuAddBtn">Add</button>
-    <button class="cancel" id="nodeMenuCancelBtn">Cancel</button>
+    <div class="menu-btns">
+      <button class="add-btn" id="nodeMenuAddBtn">Add</button>
+      <button class="cancel-btn" id="nodeMenuCancelBtn">Cancel</button>
+    </div>
   </div>
+
+  <!-- End Actions Panel -->
+  <div id="endActionsPanel" class="modal-box" style="display:none;">
+    <div class="modal-header">
+      <h3 id="endActionsPanelTitle">⚡ End Actions — Post-Call Automation</h3>
+    </div>
+    <div class="modal-body" id="endActionsList"></div>
+    <div class="modal-footer">
+      <button class="btn-add" onclick="addEndAction()">+ Add Action</button>
+      <button class="btn-save" onclick="saveEndActions()">Save</button>
+      <button class="btn-cancel" onclick="cancelEndActions()">Cancel</button>
+    </div>
+  </div>
+
+  <!-- Node Configure Panel -->
+  <div id="nodeConfigPanel" class="modal-box" style="display:none;">
+    <div class="modal-header">
+      <h3 id="nodeConfigTitle">⚙ Configure Node</h3>
+    </div>
+    <div class="modal-body" id="nodeConfigFields"></div>
+    <div class="modal-footer">
+      <button class="btn-save" onclick="saveNodeConfig()">Save</button>
+      <button class="btn-cancel" onclick="closeNodeConfig()">Cancel</button>
+    </div>
+  </div>
+
 <script src="drawflow.min.js"></script>
 <script>
-  const labelMap = {
-    TrackingNumber: "Tracking Number",
-    IVR5: "IVR Menu (5 paths)",
-    IVR10: "IVR Menu (10 paths)",
-    IVR: "IVR Menu",
-    Queue: "Queue",
-    SmartRouter: "Smart Router",
-    SmartRouter5: "Smart Router (5 paths)",
-    SmartRouter10: "Smart Router (10 paths)",
-    ReceivingNumber: "Receiving Number",
-    Voicemail: "Voicemail",
-    NoAnswer: "No Answer Branch"
+// ─────────────────────────────────────────────
+// Constants & schema
+// ─────────────────────────────────────────────
+const LABEL_MAP = {
+  TrackingNumber:'Tracking Number', IVR:'IVR Menu', Queue:'Queue',
+  SmartRouter:'Smart Router', ReceivingNumber:'Receiving Number',
+  Voicemail:'Voicemail', NoAnswer:'No Answer Branch', EndAction:'End Action'
+};
+
+const NODE_TYPES_LIST = [
+  {value:'IVR',label:'IVR Menu'}, {value:'Queue',label:'Queue'},
+  {value:'SmartRouter',label:'Smart Router'}, {value:'ReceivingNumber',label:'Receiving Number'},
+  {value:'Voicemail',label:'Voicemail'}, {value:'NoAnswer',label:'No Answer Branch'},
+  {value:'EndAction',label:'End Action'}
+];
+
+// Per-node-type configuration schema (fields for the Configure panel)
+// Designed as a solutions-architect scoping tool capturing CTM config requirements
+const NODE_CONFIG_SCHEMA = {
+  TrackingNumber: {
+    title: '📞 Tracking Number — Configuration Scope',
+    sections: [
+      { title: 'Number Details', fields: [
+        { key:'phoneNumber',    label:'Phone Number',        type:'text',   ph:'+1 (555) 000-0000' },
+        { key:'campaignSource', label:'Campaign / Source',   type:'text',   ph:'e.g. Google Paid Search' },
+        { key:'numberType',     label:'Number Type',         type:'select',
+          opts:[{v:'local',l:'Local (purchase by area code)'},{v:'tollfree',l:'Toll-Free (auto-search)'},{v:'pool',l:'Number Pool'},{v:'ported',l:'Ported / Bring Your Own'}] },
+        { key:'areaCode',       label:'Area Code (for local purchase)', type:'text', ph:'e.g. 404', showIf:'numberType', showVal:'local' },
+      ]},
+      { title: 'Call Settings', fields: [
+        { key:'recordingEnabled',  label:'Call Recording',         type:'check', default:true },
+        { key:'whisperEnabled',    label:'Agent Whisper Message',  type:'check', default:false },
+        { key:'whisperMessage',    label:'Whisper Text',           type:'text',  ph:'Incoming call from Google Ads', showIf:'whisperEnabled' },
+        { key:'transcriptionEnabled', label:'Live Call Transcription', type:'check', default:false },
+      ]}
+    ]
+  },
+
+  IVR: {
+    title: '🎛 IVR Menu — Configuration Scope',
+    sections: [
+      { title: 'Greeting', fields: [
+        { key:'greetingType',  label:'Greeting Type', type:'select',
+          opts:[{v:'tts',l:'Text-to-Speech'},{v:'audio',l:'Audio File URL'},{v:'none',l:'No Greeting (silent)'}] },
+        { key:'greetingText',  label:'Greeting Script (TTS)', type:'textarea', ph:'Thank you for calling. For Sales press 1, for Support press 2...', showIf:'greetingType', showVal:'tts' },
+        { key:'audioUrl',      label:'Audio File URL', type:'text', ph:'https://cdn.example.com/ivr-greeting.mp3', showIf:'greetingType', showVal:'audio' },
+        { key:'voice',         label:'TTS Voice', type:'select', showIf:'greetingType', showVal:'tts',
+          opts:[{v:'alice',l:'Alice (female, en-US)'},{v:'man',l:'Man (male, en-US)'},{v:'woman',l:'Woman (female, en-US)'}] },
+      ]},
+      { title: 'Keypress Behavior', fields: [
+        { key:'interruptible',     label:'Allow keypress during greeting (interruptible)', type:'check', default:true },
+        { key:'timeoutSeconds',    label:'Keypress timeout (seconds)',     type:'number', ph:'5',  default:5 },
+        { key:'maxRetries',        label:'Max retries before fallback',    type:'number', ph:'3',  default:3 },
+        { key:'onTimeout',         label:'On timeout action', type:'select',
+          opts:[{v:'replay',l:'Replay Menu'},{v:'hangup',l:'Hangup'},{v:'default_route',l:'Route to Default Destination'}] },
+        { key:'onInvalid',         label:'On invalid key action', type:'select',
+          opts:[{v:'replay',l:'Replay Menu'},{v:'hangup',l:'Hangup'},{v:'default_route',l:'Route to Default Destination'}] },
+      ]},
+      { title: 'Scope Notes', fields: [
+        { key:'numKeypresses',     label:'Expected number of keypress options', type:'number', ph:'3' },
+        { key:'nestedIVRs',        label:'Nested IVR menus required',           type:'check', default:false },
+        { key:'multiLanguage',     label:'Multi-language support required',      type:'check', default:false },
+        { key:'languageNotes',     label:'Languages needed', type:'text', ph:'English, Spanish', showIf:'multiLanguage' },
+      ]}
+    ]
+  },
+
+  Queue: {
+    title: '📋 Call Queue — Configuration Scope',
+    sections: [
+      { title: 'Routing Strategy', fields: [
+        { key:'ringStrategy', label:'Ring Strategy', type:'select',
+          opts:[{v:'round_robin',l:'Round Robin'},{v:'simultaneous',l:'Simultaneous (all agents ring)'},{v:'priority',l:'Priority Order'},{v:'skills',l:'Skills-Based Routing'}] },
+        { key:'ringTimeoutPerAgent', label:'Ring timeout per agent (sec)', type:'number', ph:'20', default:20 },
+        { key:'maxWaitSeconds',      label:'Max queue wait time (sec)',     type:'number', ph:'120', default:120 },
+      ]},
+      { title: 'Receiving Numbers', fields: [
+        { key:'receivingNumbers', label:'Agent / Receiving Numbers (one per line)', type:'textarea', ph:'+1 (555) 100-0001\n+1 (555) 100-0002' },
+        { key:'agentCount',       label:'Approx. number of agents/lines',           type:'number', ph:'3' },
+      ]},
+      { title: 'Caller Experience', fields: [
+        { key:'holdMusic',     label:'Hold Music', type:'select',
+          opts:[{v:'default',l:'Default Hold Music'},{v:'custom',l:'Custom Audio URL'},{v:'none',l:'Silence'}] },
+        { key:'holdMusicUrl',  label:'Hold Music URL', type:'text', ph:'https://...', showIf:'holdMusic', showVal:'custom' },
+        { key:'announcements', label:'Queue Announcements', type:'select',
+          opts:[{v:'none',l:'None'},{v:'position',l:'Caller Position in Queue'},{v:'wait_time',l:'Estimated Wait Time'}] },
+        { key:'announcementFreq', label:'Announcement frequency (sec)', type:'number', ph:'60', default:60,
+          showIf:'announcements', showVal:'position' },
+        { key:'callbackEnabled', label:'Offer callback option to callers', type:'check', default:false },
+      ]},
+      { title: 'Business Hours & Overflow', fields: [
+        { key:'businessHours', label:'Business Hours', type:'select',
+          opts:[{v:'always',l:'Always Open (24/7)'},{v:'schedule',l:'Use a Schedule'}] },
+        { key:'scheduleName',  label:'Schedule name', type:'text', ph:'Standard Business Hours', showIf:'businessHours', showVal:'schedule' },
+        { key:'afterHoursRoute', label:'After-hours routing', type:'select',
+          opts:[{v:'voicemail',l:'Route to Voicemail'},{v:'message',l:'Play Message & Hangup'},{v:'queue',l:'Secondary Queue'},{v:'number',l:'External Number'}] },
+      ]}
+    ]
+  },
+
+  SmartRouter: {
+    title: '🧠 Smart Router — Configuration Scope',
+    sections: [
+      { title: 'Routing Logic', fields: [
+        { key:'routingStrategy', label:'Primary Routing Strategy', type:'select',
+          opts:[
+            {v:'geographic',  l:'Geographic (by caller location / area code)'},
+            {v:'time_based',  l:'Time-Based (schedule / business hours)'},
+            {v:'round_robin', l:'Round Robin'},
+            {v:'tag_based',   l:'Tag-Based (caller attributes / history)'},
+            {v:'priority',    l:'Priority Order'},
+            {v:'caller_id',   l:'Caller ID Match'},
+            {v:'combined',    l:'Combined (multiple condition types)'},
+          ] },
+        { key:'evaluationOrder', label:'Rule Evaluation', type:'select',
+          opts:[{v:'first_match',l:'First matching rule wins'},{v:'weighted',l:'Weighted / scored match'}] },
+        { key:'conditionCount',  label:'Estimated number of routing conditions', type:'number', ph:'3' },
+      ]},
+      { title: 'Routing Conditions Detail', fields: [
+        { key:'conditionNotes', label:'Describe routing conditions', type:'textarea',
+          ph:'e.g. Route area codes 212/646/718 → NY Office\nWeekends → Voicemail\nVIP tag → Priority Queue' },
+        { key:'fallbackRoute',  label:'Default / fallback destination', type:'text', ph:'Main Queue or receiving number' },
+      ]},
+      { title: 'Data & Integration Requirements', fields: [
+        { key:'requiresCRM',    label:'Requires CRM data for routing decisions', type:'check', default:false },
+        { key:'crmNotes',       label:'CRM / data source details', type:'text', ph:'Salesforce, HubSpot...', showIf:'requiresCRM' },
+        { key:'requiresGeo',    label:'Requires geographic lookup (lat/long or area code)', type:'check', default:false },
+      ]}
+    ]
+  },
+
+  NoAnswer: {
+    title: '⚠️ No Answer Branch — Configuration Scope',
+    sections: [
+      { title: 'No-Answer Handling', fields: [
+        { key:'maxRings',      label:'Ring timeout before no-answer (sec)', type:'number', ph:'30', default:30 },
+        { key:'noAnswerAction', label:'No-answer destination', type:'select',
+          opts:[{v:'voicemail',l:'Voicemail'},{v:'transfer',l:'Transfer to Number'},{v:'queue',l:'Overflow Queue'},{v:'message',l:'Play Message & Hangup'},{v:'hangup',l:'Hangup'}] },
+        { key:'forwardTo',     label:'Transfer-to Number', type:'text', ph:'+1 (555) 000-0000', showIf:'noAnswerAction', showVal:'transfer' },
+      ]},
+      { title: 'Notifications', fields: [
+        { key:'missedCallAlert', label:'Send missed call notification', type:'check', default:false },
+        { key:'alertEmail',      label:'Notification email address(es)', type:'text', ph:'team@company.com', showIf:'missedCallAlert' },
+        { key:'smsAlert',        label:'Send missed call SMS alert', type:'check', default:false },
+        { key:'smsTo',           label:'SMS alert number', type:'text', ph:'+1 (555) 000-0000', showIf:'smsAlert' },
+      ]}
+    ]
+  },
+
+  Voicemail: {
+    title: '📬 Voicemail — Configuration Scope',
+    sections: [
+      { title: 'Greeting', fields: [
+        { key:'greetingType', label:'Voicemail Greeting', type:'select',
+          opts:[{v:'default',l:'Default System Greeting'},{v:'tts',l:'Custom Text-to-Speech'},{v:'audio',l:'Custom Audio File URL'}] },
+        { key:'greetingText',     label:'Greeting Script (TTS)',  type:'textarea', ph:'You have reached...', showIf:'greetingType', showVal:'tts' },
+        { key:'greetingAudioUrl', label:'Greeting Audio URL',     type:'text',     ph:'https://...', showIf:'greetingType', showVal:'audio' },
+        { key:'maxDuration',      label:'Max recording duration (sec)', type:'number', ph:'60', default:60 },
+      ]},
+      { title: 'Delivery & Notifications', fields: [
+        { key:'emailTranscription',  label:'Email voicemail recording + transcription', type:'check', default:false },
+        { key:'notificationEmail',   label:'Delivery email address(es)', type:'text', ph:'team@company.com', showIf:'emailTranscription' },
+        { key:'smsNotification',     label:'SMS notification on new voicemail', type:'check', default:false },
+        { key:'smsNumber',           label:'SMS notification number', type:'text', ph:'+1 (555) 000-0000', showIf:'smsNotification' },
+      ]}
+    ]
+  },
+
+  ReceivingNumber: {
+    title: '🤝 Receiving Number — Configuration Scope',
+    sections: [
+      { title: 'Destination', fields: [
+        { key:'phoneNumber',  label:'Receiving Phone Number', type:'text', ph:'+1 (555) 000-0000' },
+        { key:'contactName',  label:'Agent / Team Name',      type:'text', ph:'Sales Team East' },
+        { key:'ringTimeout',  label:'Ring timeout (seconds)', type:'number', ph:'20', default:20 },
+      ]},
+      { title: 'Agent Experience', fields: [
+        { key:'callScreening',  label:'Call screening (agent must press key to accept)', type:'check', default:false },
+        { key:'callWhisper',    label:'Call whisper message',     type:'text',  ph:'Incoming sales call from Google campaign' },
+        { key:'simultaneousDial', label:'Simultaneous dial additional numbers', type:'text', ph:'+1 (555) 100-0002, +1 (555) 100-0003' },
+        { key:'callerId',       label:'Caller ID override', type:'select',
+          opts:[{v:'caller',l:"Show caller's number"},{v:'tracking',l:'Show tracking number'},{v:'custom',l:'Custom number'}] },
+        { key:'customCallerId', label:'Custom caller ID number', type:'text', ph:'+1 (555) 000-0000', showIf:'callerId', showVal:'custom' },
+      ]}
+    ]
+  },
+
+  EndAction: { title:'End Action', sections:[] }  // handled by its own panel
+};
+
+// Generates a 1-line summary for a node's configured data
+function getConfigSummary(type, config) {
+  if (!config || Object.keys(config).length === 0) return null;
+  const c = config;
+  const strategyLabels = {
+    round_robin:'Round Robin', simultaneous:'Simultaneous', priority:'Priority',
+    skills:'Skills-Based', geographic:'Geographic', time_based:'Time-Based',
+    tag_based:'Tag-Based', caller_id:'Caller ID', combined:'Combined'
   };
-  // Only use rectangles for node shape
-  function getShapeClassByDepth(depth) {
-    return "shape-rect";
+  switch (type) {
+    case 'TrackingNumber': {
+      const parts = [];
+      if (c.phoneNumber) parts.push(c.phoneNumber);
+      if (c.numberType) parts.push({direct:'Direct',pool:'Pool',ported:'Ported'}[c.numberType]||'');
+      if (c.recordingEnabled) parts.push('REC');
+      return parts.filter(Boolean).join(' · ') || null;
+    }
+    case 'IVR': {
+      const parts = [];
+      if (c.greetingType) parts.push({tts:'TTS',audio:'Audio',none:'Silent'}[c.greetingType]||'');
+      if (c.numKeypresses) parts.push(c.numKeypresses + ' options');
+      if (c.timeoutSeconds) parts.push(c.timeoutSeconds + 's timeout');
+      if (c.multiLanguage) parts.push('Multi-lang');
+      return parts.filter(Boolean).join(' · ') || null;
+    }
+    case 'Queue': {
+      const parts = [];
+      if (c.ringStrategy) parts.push(strategyLabels[c.ringStrategy]||c.ringStrategy);
+      if (c.agentCount) parts.push(c.agentCount + ' agents');
+      if (c.maxWaitSeconds) parts.push(c.maxWaitSeconds + 's max');
+      if (c.callbackEnabled) parts.push('Callback');
+      if (c.businessHours === 'schedule' && c.scheduleName) parts.push(c.scheduleName);
+      return parts.filter(Boolean).join(' · ') || null;
+    }
+    case 'SmartRouter': {
+      const parts = [];
+      if (c.routingStrategy) parts.push(strategyLabels[c.routingStrategy]||c.routingStrategy);
+      if (c.conditionCount) parts.push(c.conditionCount + ' rules');
+      if (c.fallbackRoute) parts.push('Fallback: ' + c.fallbackRoute);
+      return parts.filter(Boolean).join(' · ') || null;
+    }
+    case 'NoAnswer': {
+      const actionLabel = {voicemail:'→ Voicemail',transfer:'→ Transfer',queue:'→ Queue',message:'→ Message',hangup:'Hangup'}[c.noAnswerAction];
+      const parts = [];
+      if (actionLabel) parts.push(actionLabel);
+      if (c.maxRings) parts.push(c.maxRings + 's rings');
+      if (c.missedCallAlert) parts.push('Alert ✓');
+      return parts.filter(Boolean).join(' · ') || null;
+    }
+    case 'Voicemail': {
+      const parts = [];
+      if (c.greetingType) parts.push({default:'Default',tts:'TTS',audio:'Audio'}[c.greetingType]||'');
+      if (c.emailTranscription) parts.push('Email ✓');
+      if (c.maxDuration) parts.push(c.maxDuration + 's max');
+      return parts.filter(Boolean).join(' · ') || null;
+    }
+    case 'ReceivingNumber': {
+      const parts = [];
+      if (c.contactName) parts.push(c.contactName);
+      if (c.phoneNumber) parts.push(c.phoneNumber);
+      if (c.callScreening) parts.push('Screened');
+      return parts.filter(Boolean).join(' · ') || null;
+    }
+    default: return null;
   }
-  // Palette for color by depth
-  const COLOR_PALETTE = [
-    "#4398EC", // bold blue
-    "#FC635D", // strong red
-    "#FED13A", // strong yellow
-    "#42D57B", // strong green
-    "#A259DB", // strong violet
-    "#EF8649", // strong orange
-    "#41C6EF"  // strong cyan
-  ];
-  const NODE_TYPES = [
-    { value: "IVR", label: "IVR Menu (3 paths)" },
-    { value: "IVR5", label: "IVR Menu (5 paths)" },
-    { value: "IVR10", label: "IVR Menu (10 paths)" },
-    { value: "Queue", label: "Queue" },
-    { value: "SmartRouter", label: "Smart Router (3 paths)" },
-    { value: "SmartRouter5", label: "Smart Router (5 paths)" },
-    { value: "SmartRouter10", label: "Smart Router (10 paths)" },
-    { value: "ReceivingNumber", label: "Receiving Number" },
-    { value: "Voicemail", label: "Voicemail" },
-    { value: "NoAnswer", label: "No Answer Branch" }
-  ];
-  const editor = new Drawflow(document.getElementById('drawflow'));
-  editor.reroute = true;
-  editor.start();
-  document.getElementById('drawflow').style.height = (window.innerHeight-80) + 'px';
-  // Keyboard node deletion support
-  document.addEventListener('keydown', function(e) {
-    // Only delete if a node is selected and focus is not in text editing fields
-    if ((e.key === "Delete" || e.key === "Backspace") &&
-        document.activeElement.tagName !== 'INPUT' &&
-        document.activeElement.tagName !== 'TEXTAREA') {
-      const selected = editor.getSelectedNodes();
-      if(selected && selected.length > 0) {
-        selected.forEach(id => editor.removeNodeId(id));
-      }
-    }
-  });
-  let nodeCount = {
-    TrackingNumber:1,
-    IVR:1, IVR5:1, IVR10:1,
-    Queue:1,
-    SmartRouter:1, SmartRouter5:1, SmartRouter10:1,
-    ReceivingNumber:1,
-    Voicemail:1,
-    NoAnswer:1
-  };
+}
 
-  function addNodeStandalone() {
-    const type = document.getElementById('nodeType').value;
-    addNodeWithDepth(type, null, null); 
+// ─────────────────────────────────────────────
+// Drawflow init
+// ─────────────────────────────────────────────
+const editor = new Drawflow(document.getElementById('drawflow'));
+editor.reroute = true;
+editor.start();
+
+document.addEventListener('keydown', function(e) {
+  if ((e.key === 'Delete' || e.key === 'Backspace') &&
+      document.activeElement.tagName !== 'INPUT' &&
+      document.activeElement.tagName !== 'TEXTAREA') {
+    const sel = editor.getSelectedNodes ? editor.getSelectedNodes() : [];
+    sel.forEach(id => editor.removeNodeId(id));
   }
-  function addNodeWithDepth(type, parentOutNodeId, fromOutputIdx) {
-    const defaultName = labelMap[type] + ' ' + nodeCount[type]++;
-    let outputs = 1, inputs = 1;
-    let outputLabels = [];
-    if(type === 'TrackingNumber') { outputs = 1; inputs = 0; }
-    else if(type === 'IVR') { outputs = 3; inputs = 1; }
-    else if(type === 'IVR5') { outputs = 5; inputs = 1; }
-    else if(type === 'IVR10') { outputs = 10; inputs = 1; }
-    else if(type === 'SmartRouter') { outputs = 3; inputs = 1; }
-    else if(type === 'SmartRouter5') { outputs = 5; inputs = 1; }
-    else if(type === 'SmartRouter10') { outputs = 10; inputs = 1; }
-    else if(type === 'NoAnswer') { outputs = 1; inputs = 1; }
-    // DO NOT add extra outputs for notes (fully remove any lingering notes logic)
+});
 
-    // generate default output labels (used only if not restoring from data)
-    for(let i=0;i<outputs;i++) outputLabels.push('');
-    let depth = 1;
-    let x = 300, y = 120;
-    if (parentOutNodeId !== null) {
-      try {
-        const parentNode = editor.getNodeFromId(parentOutNodeId);
-        depth = (parentNode.data.depth || 1) + 1;
-        x = parentNode.pos_x + 220;
-        y = parentNode.pos_y + (depth * 32);
-      } catch { depth = 2; }
-    }
-    let shapeClass = getShapeClassByDepth(depth);
+let nodeCount = { TrackingNumber:1,IVR:1,Queue:1,SmartRouter:1,ReceivingNumber:1,Voicemail:1,NoAnswer:1,EndAction:1 };
 
-    // gather user-specified labels if reloading node
-    let data = { type: String(type), label: String(defaultName), depth };
-    if(parentOutNodeId==null) data.outputLabels = [...outputLabels];
-    // If reusing node (i.e., Drawflow reload), load existing output labels:
-    if(fromOutputIdx && parentOutNodeId) {
-      try {
-        const parentNode = editor.getNodeFromId(parentOutNodeId);
-        if(parentNode.data && parentNode.data.outputLabels) data.outputLabels = [...parentNode.data.outputLabels];
-      } catch {}
-    }
-
-    // main node content with editable output labels for multi-output nodes
-
-    let outputInputsHTML = '';
-    if(type === 'IVR' || type === 'IVR5' || type === 'IVR10' || type === 'SmartRouter' || type === 'SmartRouter5' || type === 'SmartRouter10') {
-      let restored = [];
-      if(data.outputLabels && Array.isArray(data.outputLabels))
-        restored = data.outputLabels;
-      while(restored.length < outputs) restored.push('');
-      const getPlaceholder = (type, i) =>
-        (type === 'IVR' || type === 'IVR5' || type === 'IVR10') ? `Keypress ${i+1}` :
-        (type === 'SmartRouter' || type === 'SmartRouter5' || type === 'SmartRouter10') ? `If ${i+1} is true then route here` :
-        "";
-      outputInputsHTML = `
-        <div class='output-slot-list'>
-          ${restored.map((v, i) => `
-            <div class='output-slot-row'>
-              <input type='text' class='output-label-txt'
-                value="${v}"
-                onchange="window.updateOutputLabel(this, '${type}', ${i}, this.value, this.closest('.drawflow-node').dataset.id)"
-                placeholder="${getPlaceholder(type, i)}">
-            </div>`).join('')}
-        </div>
-      `;
-    } else {
-      outputInputsHTML = '';
-    }
-    // Add notes textarea below output labels
-    let notesValue = (data.notesValue !== undefined) ? data.notesValue : '';
-    let notesHTML = `<textarea class="node-notes-field" placeholder="Enter notes or description here..." oninput="window.saveNodeNotes(this, this.closest('.drawflow-node').dataset.id)" rows="2">${notesValue}</textarea>`;
-    let bgColor = COLOR_PALETTE[(depth - 1) % COLOR_PALETTE.length];
-    const styleStr = `background:${bgColor}; height:auto;`;
-    const html = `<div data-type="${type}">
-      <div class="shape-inner"><span class="drawflow-node-label" ondblclick="editLabel(this)">${defaultName}</span></div>
-      ${outputInputsHTML}
-      ${notesHTML}
+// ─────────────────────────────────────────────
+// Node HTML builder
+// ─────────────────────────────────────────────
+function buildNodeHTML(type, label, outputLabels, notesValue, configData, endActions) {
+  let outputInputsHTML = '';
+  if (type === 'IVR' || type === 'SmartRouter') {
+    const labels = outputLabels || [];
+    const ph = type === 'IVR' ? 'Keypress' : 'Condition';
+    const addBtn = type === 'IVR'
+      ? `<button class="add-path-btn" onclick="event.stopPropagation();window.addIVROutput(this)">+ Add Path</button>`
+      : '';
+    outputInputsHTML = `<div class="output-slot-list">
+      ${labels.map((v,i) => `<div class="output-slot-row">
+        <input type="text" class="output-label-txt" value="${(v||'').replace(/"/g,'&quot;')}"
+          oninput="window.updateOutputLabel(this,${i},this.value)"
+          placeholder="${ph} ${i+1}">
+      </div>`).join('')}
+      ${addBtn}
     </div>`;
-    const newNodeId = editor.addNode(
-      String(type),
-      inputs,
-      outputs,
-      x,
-      y,
-      shapeClass,
-      data,
-      html
-    );
-    // Ensure full node rectangle receives the color
-    setTimeout(function() {
-      let nodeElem = document.getElementById('node-' + newNodeId);
-      if (nodeElem) nodeElem.style.background = bgColor;
-    }, 30);
-    if (parentOutNodeId !== null && fromOutputIdx && Number(fromOutputIdx) > 0) {
-      editor.addConnection(parentOutNodeId, newNodeId, "output_" + fromOutputIdx, "input_1");
-    }
   }
 
-  window.saveNodeNotes = function(textarea, nodeId) {
+  const summary = getConfigSummary(type, configData);
+  const summaryHTML = summary
+    ? `<div class="node-config-summary"><span class="config-badge configured">⚙ ${summary}</span></div>`
+    : `<div class="node-config-summary"></div>`;
+
+  const notes = (notesValue||'').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+  // End Actions button label
+  const actions = endActions || [];
+  let eaBtnText = '⚡ End Actions';
+  let eaBtnClass = 'node-footer-btn end-actions-btn';
+  if (actions.length > 0) {
+    const END_TYPE_ICON = { trigger:'⚡', webhook:'🌐', google_conversion:'📊', email_notification:'📧' };
+    const icons = [...new Set(actions.map(a => END_TYPE_ICON[a.type] || '⚡'))];
+    eaBtnText = icons.join('') + ' ' + (actions.length > 1 ? actions.length + ' actions ✓' : (actions[0]?.type||'action') + ' ✓');
+    eaBtnClass += ' has-actions';
+  }
+
+  const configureBtn = type !== 'EndAction'
+    ? `<button class="node-footer-btn" onclick="event.stopPropagation();window.openNodeConfig(parseInt(this.closest('.drawflow-node').id.replace('node-','')))">⚙ Configure</button>`
+    : '';
+
+  const copyBtn = `<button class="node-footer-btn copy-btn" title="Duplicate this node" onclick="event.stopPropagation();window.copyNode(parseInt(this.closest('.drawflow-node').id.replace('node-','')))">⎘</button>`;
+
+  return `<div class="node-inner">
+    <div class="node-type-badge">${LABEL_MAP[type]||type}</div>
+    <span class="drawflow-node-label" onclick="event.stopPropagation();window.editLabel(this)">${label}</span>
+    ${summaryHTML}
+    ${outputInputsHTML}
+    <textarea class="node-notes-field" placeholder="Notes / scope details..." rows="2"
+      oninput="window.saveNodeNotes(this)">${notes}</textarea>
+  </div>
+  <div class="node-footer">
+    ${configureBtn}
+    <button class="${eaBtnClass}"
+      onclick="event.stopPropagation();window.showEndActionsPanel(parseInt(this.closest('.drawflow-node').id.replace('node-','')))">
+      ${eaBtnText}
+    </button>
+    ${copyBtn}
+  </div>`;
+}
+
+// ─────────────────────────────────────────────
+// Add node
+// ─────────────────────────────────────────────
+function addNodeStandalone() {
+  addNodeWithDepth(document.getElementById('nodeType').value, null, null);
+}
+
+function addNodeWithDepth(type, parentId, fromOutputIdx) {
+  const label = LABEL_MAP[type] + ' ' + nodeCount[type]++;
+  let outputs = 1, inputs = 1;
+  if (type === 'TrackingNumber') { outputs=1; inputs=0; }
+  else if (type === 'IVR')       { outputs=3; inputs=1; }
+  else if (type === 'SmartRouter'){ outputs=3; inputs=1; }
+  else if (type === 'NoAnswer')  { outputs=1; inputs=1; }
+  else if (type === 'EndAction') { outputs=0; inputs=1; }
+
+  const outputLabels = Array(outputs).fill('');
+  let x=200, y=120, depth=1;
+  if (parentId !== null) {
     try {
-      const node = editor.getNodeFromId(nodeId);
-      node.data.notesValue = textarea.value;
+      const p = editor.getNodeFromId(parentId);
+      depth = (p.data.depth||1)+1;
+      x = p.pos_x + 280;
+      y = p.pos_y + ((fromOutputIdx||1)-1)*80;
+    } catch { depth=2; }
+  }
+
+  const data = { type:String(type), label, depth, outputLabels:[...outputLabels], config:{}, endActions:[] };
+  const html = buildNodeHTML(type, label, outputLabels, '', {}, []);
+  const newId = editor.addNode(String(type), inputs, outputs, x, y, '', data, html);
+
+  setTimeout(()=>{
+    const el = document.getElementById('node-'+newId);
+    if (el) el.setAttribute('data-node', type);
+  }, 10);
+
+  if (parentId !== null && fromOutputIdx) {
+    editor.addConnection(parentId, newId, 'output_'+fromOutputIdx, 'input_1');
+  }
+  return newId;
+}
+
+// ─────────────────────────────────────────────
+// Inline field handlers
+// ─────────────────────────────────────────────
+window.saveNodeNotes = function(ta) {
+  try {
+    const id = parseInt(ta.closest('.drawflow-node').id.replace('node-',''));
+    const n = editor.getNodeFromId(id);
+    n.data.notesValue = ta.value;
+    editor.updateNodeDataFromId(id, n.data);
+  } catch {}
+};
+
+window.updateOutputLabel = function(inp, idx, value) {
+  try {
+    const id = parseInt(inp.closest('.drawflow-node').id.replace('node-',''));
+    const n = editor.getNodeFromId(id);
+    if (!n.data.outputLabels) n.data.outputLabels = [];
+    n.data.outputLabels[idx] = value;
+    editor.updateNodeDataFromId(id, n.data);
+  } catch {}
+};
+
+window.addIVROutput = function(btn) {
+  const nodeDiv = btn.closest('.drawflow-node');
+  const nodeId = parseInt(nodeDiv.id.replace('node-',''));
+  const node = editor.getNodeFromId(nodeId);
+  if (!node || !node.data) return;
+  editor.addNodeOutput(nodeId);
+  if (!node.data.outputLabels) node.data.outputLabels = [];
+  const newIdx = node.data.outputLabels.length;
+  node.data.outputLabels.push('');
+  editor.updateNodeDataFromId(nodeId, node.data);
+  const slotList = nodeDiv.querySelector('.output-slot-list');
+  const row = document.createElement('div');
+  row.className = 'output-slot-row';
+  row.innerHTML = `<input type="text" class="output-label-txt" value=""
+    oninput="window.updateOutputLabel(this,${newIdx},this.value)"
+    placeholder="Keypress ${newIdx+1}">`;
+  slotList.insertBefore(row, btn);
+  editor.updateConnectionNodes('node-'+nodeId);
+};
+
+window.editLabel = function(span) {
+  const old = span.textContent;
+  const inp = document.createElement('input');
+  inp.type='text'; inp.value=old; inp.className='drawflow-node-label'; inp.style.width='100%';
+  function finish() {
+    const val = inp.value.trim()||old;
+    span.textContent = val;
+    span.style.display = '';
+    inp.remove();
+    try {
+      const id = parseInt(span.closest('.drawflow-node').id.replace('node-',''));
+      const n = editor.getNodeFromId(id);
+      n.data.label = val;
+      editor.updateNodeDataFromId(id, n.data);
     } catch {}
   }
+  inp.onblur = finish;
+  inp.onkeydown = e => { if(e.key==='Enter'){e.preventDefault();finish();} };
+  span.parentNode.insertBefore(inp, span);
+  span.style.display = 'none';
+  inp.focus(); inp.select();
+};
 
-  // Handler for output label edits on-the-fly
-  window.updateOutputLabel = function(inputElem, type, idx, value, nodeId) {
-    try {
-      const node = editor.getNodeFromId(nodeId);
-      if(!node.data.outputLabels) node.data.outputLabels=[];
-      node.data.outputLabels[idx] = value;
-      // Re-render node HTML with updated values
-      let shapeClass = node.class;
-      let html = `<div data-type="${type}" style="height:auto">
-        <div class="shape-inner"><span class="drawflow-node-label" ondblclick="editLabel(this)">${node.data.label}</span></div>
-        <div style=\"margin-top:5px;\">
-          ${node.data.outputLabels.map((v, i) => `<input type='text' style=\"width:90%;font-size:0.93em;margin-bottom:2px;background:#26344c;color:#8ecff7;border:1px solid #01BDF6;border-radius:4px;padding:2px 4px;\" value=\"${v||''}\" onchange=\"window.updateOutputLabel(this, '${type}', ${i}, this.value, this.parentNode.parentNode.parentNode.parentNode.dataset.id)\" placeholder=\"${(type === 'IVR' || type === 'IVR5' || type === 'IVR10') ? `Keypress ${i+1}` : ''}\">`).join('')}
+// Copy / duplicate a node with all its data
+window.copyNode = function(nodeId) {
+  const node = editor.getNodeFromId(nodeId);
+  if (!node) return;
+  const type = node.data.type;
+  const inputs  = Object.keys(node.inputs  || {}).length;
+  const outputs = Object.keys(node.outputs || {}).length;
+  const newData = JSON.parse(JSON.stringify(node.data));
+  newData.label = node.data.label + ' (copy)';
+  const html = buildNodeHTML(type, newData.label, newData.outputLabels||[], newData.notesValue||'', newData.config||{}, newData.endActions||[]);
+  const newId = editor.addNode(String(type), inputs, outputs, node.pos_x + 48, node.pos_y + 48, '', newData, html);
+  setTimeout(() => {
+    const el = document.getElementById('node-' + newId);
+    if (el) el.setAttribute('data-node', type);
+  }, 10);
+};
+
+// ─────────────────────────────────────────────
+// Node Configure panel
+// ─────────────────────────────────────────────
+let currentConfigNodeId = null;
+let configSnapshot = null;
+
+window.openNodeConfig = function(nodeId) {
+  const node = editor.getNodeFromId(nodeId);
+  if (!node) return;
+  const type = node.data.type;
+  const schema = NODE_CONFIG_SCHEMA[type];
+  if (!schema || schema.sections.length === 0) return;
+  currentConfigNodeId = nodeId;
+  configSnapshot = JSON.parse(JSON.stringify(node.data.config||{}));
+  document.getElementById('nodeConfigTitle').textContent = schema.title;
+  renderConfigFields(type, node.data.config||{});
+  document.getElementById('nodeConfigPanel').style.display = 'block';
+};
+
+function renderConfigFields(type, config) {
+  const schema = NODE_CONFIG_SCHEMA[type];
+  const container = document.getElementById('nodeConfigFields');
+  let html = '';
+  schema.sections.forEach(section => {
+    html += `<div class="config-section-title">${section.title}</div>`;
+    section.fields.forEach(f => {
+      const val = config[f.key];
+      // showIf logic — generate a data attribute; visibility managed by onchange of the trigger field
+      const si = f.showIf ? `data-showif="${f.showIf}" data-showval="${f.showVal||'__truthy__'}"` : '';
+      // Determine initial display
+      let hidden = false;
+      if (f.showIf) {
+        const triggerVal = config[f.showIf];
+        if (f.showVal) hidden = triggerVal !== f.showVal;
+        else hidden = !triggerVal;
+      }
+      const hiddenStyle = hidden ? 'style="display:none"' : '';
+      html += `<div class="config-field" id="field-${f.key}" ${si} ${hiddenStyle}>`;
+      html += `<label>${f.label}</label>`;
+      if (f.type === 'text' || f.type === 'number') {
+        html += `<input type="${f.type}" data-key="${f.key}" value="${(val!==undefined?val:(f.default||'')).toString().replace(/"/g,'&quot;')}"
+          placeholder="${f.ph||''}"
+          oninput="window.onConfigChange('${f.key}',this.value)">`;
+      } else if (f.type === 'textarea') {
+        html += `<textarea data-key="${f.key}" rows="3" placeholder="${f.ph||''}"
+          oninput="window.onConfigChange('${f.key}',this.value)">${(val!==undefined?val:'')}</textarea>`;
+      } else if (f.type === 'select') {
+        const curVal = val !== undefined ? val : (f.default || f.opts[0].v);
+        html += `<select data-key="${f.key}" onchange="window.onConfigChange('${f.key}',this.value);window.refreshConfigVisibility()">`;
+        f.opts.forEach(o => html += `<option value="${o.v}" ${curVal===o.v?'selected':''}>${o.l}</option>`);
+        html += `</select>`;
+      } else if (f.type === 'check') {
+        const checked = val !== undefined ? val : (f.default || false);
+        html += `<div class="checkbox-row">
+          <input type="checkbox" data-key="${f.key}" id="cfg_${f.key}" ${checked?'checked':''}
+            onchange="window.onConfigChange('${f.key}',this.checked);window.refreshConfigVisibility()">
+          <label for="cfg_${f.key}">Enabled</label>
+        </div>`;
+      }
+      html += `</div>`;
+    });
+  });
+  container.innerHTML = html;
+}
+
+window.onConfigChange = function(key, value) {
+  if (!currentConfigNodeId) return;
+  const n = editor.getNodeFromId(currentConfigNodeId);
+  if (!n) return;
+  if (!n.data.config) n.data.config = {};
+  n.data.config[key] = value;
+  editor.updateNodeDataFromId(currentConfigNodeId, n.data);
+};
+
+window.refreshConfigVisibility = function() {
+  document.querySelectorAll('#nodeConfigFields [data-showif]').forEach(el => {
+    const triggerKey = el.dataset.showif;
+    const triggerVal = el.dataset.showval;
+    const triggerEl = document.querySelector(`#nodeConfigFields [data-key="${triggerKey}"]`);
+    if (!triggerEl) return;
+    const currentVal = triggerEl.type === 'checkbox' ? triggerEl.checked : triggerEl.value;
+    const show = triggerVal === '__truthy__' ? !!currentVal : currentVal === triggerVal;
+    el.style.display = show ? '' : 'none';
+  });
+};
+
+// Generates a human-readable multi-line notes string from saved config
+function generateNotesFromConfig(type, config) {
+  const c = config || {};
+  const lines = [];
+  const add = (label, key, map) => {
+    const raw = c[key];
+    if (raw === undefined || raw === null || raw === '') return;
+    if (raw === true)  { lines.push(`${label}: Yes`); return; }
+    if (raw === false) { lines.push(`${label}: No`);  return; }
+    const v = map ? (map[raw] || raw) : raw;
+    lines.push(`${label}: ${v}`);
+  };
+  switch (type) {
+    case 'TrackingNumber':
+      add('Number',       'phoneNumber');
+      add('Campaign',     'campaignSource');
+      add('Type',         'numberType',   {direct:'Direct',pool:'Pool',ported:'Ported'});
+      add('Recording',    'recordingEnabled');
+      add('Whisper',      'whisperEnabled');
+      add('Whisper Text', 'whisperMessage');
+      add('Transcription','transcriptionEnabled');
+      break;
+    case 'IVR':
+      add('Greeting',       'greetingType', {tts:'Text-to-Speech',audio:'Audio File',none:'Silent (no greeting)'});
+      add('Script',         'greetingText');
+      add('Audio URL',      'audioUrl');
+      add('Voice',          'voice');
+      add('Interruptible',  'interruptible');
+      add('Timeout (sec)',  'timeoutSeconds');
+      add('Max Retries',    'maxRetries');
+      add('On Timeout',     'onTimeout',    {replay:'Replay Menu',hangup:'Hangup',default_route:'Default Route'});
+      add('On Invalid Key', 'onInvalid',    {replay:'Replay Menu',hangup:'Hangup',default_route:'Default Route'});
+      add('# Keypress Options','numKeypresses');
+      add('Nested IVRs',    'nestedIVRs');
+      add('Multi-language', 'multiLanguage');
+      add('Languages',      'languageNotes');
+      break;
+    case 'Queue':
+      add('Ring Strategy',       'ringStrategy',       {round_robin:'Round Robin',simultaneous:'Simultaneous (all ring)',priority:'Priority Order',skills:'Skills-Based'});
+      add('Ring Timeout/Agent',  'ringTimeoutPerAgent');
+      add('Max Wait (sec)',       'maxWaitSeconds');
+      add('Agent Count',         'agentCount');
+      add('Receiving Numbers',   'receivingNumbers');
+      add('Hold Music',          'holdMusic',          {default:'Default',custom:'Custom URL',none:'Silence'});
+      add('Hold Music URL',      'holdMusicUrl');
+      add('Announcements',       'announcements',      {none:'None',position:'Caller Position',wait_time:'Estimated Wait Time'});
+      add('Announce Freq (sec)', 'announcementFreq');
+      add('Callback Offer',      'callbackEnabled');
+      add('Business Hours',      'businessHours',      {always:'24/7 Always Open',schedule:'Use Schedule'});
+      add('Schedule Name',       'scheduleName');
+      add('After-Hours Route',   'afterHoursRoute',    {voicemail:'Voicemail',message:'Play Message + Hangup',queue:'Secondary Queue',number:'External Number'});
+      break;
+    case 'SmartRouter':
+      add('Strategy',          'routingStrategy',  {geographic:'Geographic',time_based:'Time-Based',round_robin:'Round Robin',tag_based:'Tag-Based',priority:'Priority',caller_id:'Caller ID',combined:'Combined'});
+      add('Evaluation',        'evaluationOrder',  {first_match:'First Match Wins',weighted:'Weighted / Scored'});
+      add('Condition Count',   'conditionCount');
+      add('Conditions',        'conditionNotes');
+      add('Fallback Route',    'fallbackRoute');
+      add('Requires CRM',      'requiresCRM');
+      add('CRM / Data Source', 'crmNotes');
+      add('Geo Lookup',        'requiresGeo');
+      break;
+    case 'NoAnswer':
+      add('Max Rings (sec)',  'maxRings');
+      add('Action',          'noAnswerAction',  {voicemail:'Route to Voicemail',transfer:'Transfer to Number',queue:'Overflow Queue',message:'Play Message + Hangup',hangup:'Hangup'});
+      add('Transfer To',     'forwardTo');
+      add('Missed Call Alert','missedCallAlert');
+      add('Alert Email',     'alertEmail');
+      add('SMS Alert',       'smsAlert');
+      add('SMS To',          'smsTo');
+      break;
+    case 'Voicemail':
+      add('Greeting',         'greetingType',     {default:'Default System Greeting',tts:'Text-to-Speech',audio:'Custom Audio File'});
+      add('Greeting Script',  'greetingText');
+      add('Audio URL',        'greetingAudioUrl');
+      add('Max Duration (sec)','maxDuration');
+      add('Email Transcription','emailTranscription');
+      add('Delivery Email',   'notificationEmail');
+      add('SMS Notification', 'smsNotification');
+      add('SMS To',           'smsNumber');
+      break;
+    case 'ReceivingNumber':
+      add('Agent / Team',       'contactName');
+      add('Number',             'phoneNumber');
+      add('Ring Timeout (sec)', 'ringTimeout');
+      add('Call Screening',     'callScreening');
+      add('Whisper Message',    'callWhisper');
+      add('Simultaneous Dial',  'simultaneousDial');
+      add('Caller ID',          'callerId',  {caller:"Show Caller's Number",tracking:'Show Tracking Number',custom:'Custom Number'});
+      add('Custom Caller ID',   'customCallerId');
+      break;
+  }
+  return lines.join('\n');
+}
+
+window.saveNodeConfig = function() {
+  if (!currentConfigNodeId) return;
+  const n = editor.getNodeFromId(currentConfigNodeId);
+  if (!n) return;
+  const type = n.data.type;
+  const config = n.data.config || {};
+  const summary = getConfigSummary(type, config);
+
+  // Auto-populate notes field with human-readable config summary
+  const notesText = generateNotesFromConfig(type, config);
+  if (notesText) {
+    n.data.notesValue = notesText;
+    editor.updateNodeDataFromId(currentConfigNodeId, n.data);
+  }
+
+  const nodeEl = document.getElementById('node-'+currentConfigNodeId);
+  if (nodeEl) {
+    // Update summary badge
+    const summaryDiv = nodeEl.querySelector('.node-config-summary');
+    if (summaryDiv) {
+      summaryDiv.innerHTML = summary
+        ? `<span class="config-badge configured">⚙ ${summary}</span>`
+        : '';
+    }
+    // Update notes textarea
+    if (notesText) {
+      const ta = nodeEl.querySelector('.node-notes-field');
+      if (ta) ta.value = notesText;
+    }
+    // Mark configure button as configured
+    const cfgBtn = nodeEl.querySelector('.node-footer-btn:not(.end-actions-btn):not(.copy-btn)');
+    if (cfgBtn) cfgBtn.classList.toggle('configured', !!summary);
+  }
+  configSnapshot = null;
+  document.getElementById('nodeConfigPanel').style.display = 'none';
+  currentConfigNodeId = null;
+};
+
+window.closeNodeConfig = function() {
+  // Restore snapshot
+  if (currentConfigNodeId !== null && configSnapshot !== null) {
+    const n = editor.getNodeFromId(currentConfigNodeId);
+    if (n) { n.data.config = configSnapshot; editor.updateNodeDataFromId(currentConfigNodeId, n.data); }
+  }
+  document.getElementById('nodeConfigPanel').style.display = 'none';
+  currentConfigNodeId = null;
+  configSnapshot = null;
+};
+
+// ─────────────────────────────────────────────
+// End Actions panel
+// ─────────────────────────────────────────────
+let currentEANodeId = null;
+let eaSnapshot = null;
+
+const END_ACTION_TYPES = [
+  { value:'trigger',            label:'Trigger',           icon:'⚡' },
+  { value:'webhook',            label:'Webhook',           icon:'🌐' },
+  { value:'google_conversion',  label:'Google Conversion', icon:'📊' },
+  { value:'email_notification', label:'Email Alert',       icon:'📧' }
+];
+const EA_ICON = Object.fromEntries(END_ACTION_TYPES.map(t=>[t.value,t.icon]));
+
+window.showEndActionsPanel = function(nodeId) {
+  currentEANodeId = nodeId;
+  const node = editor.getNodeFromId(nodeId);
+  eaSnapshot = JSON.parse(JSON.stringify(node.data.endActions||[]));
+  const label = node.data.label || 'Node';
+  document.getElementById('endActionsPanelTitle').textContent = `⚡ End Actions — ${label}`;
+  renderEndActionsList(node.data.endActions||[]);
+  document.getElementById('endActionsPanel').style.display = 'block';
+};
+
+window.cancelEndActions = function() {
+  if (currentEANodeId !== null && eaSnapshot !== null) {
+    const n = editor.getNodeFromId(currentEANodeId);
+    if (n) { n.data.endActions = eaSnapshot; editor.updateNodeDataFromId(currentEANodeId, n.data); }
+  }
+  document.getElementById('endActionsPanel').style.display = 'none';
+  currentEANodeId = null; eaSnapshot = null;
+};
+
+window.saveEndActions = function() {
+  if (currentEANodeId !== null) {
+    const node = editor.getNodeFromId(currentEANodeId);
+    const actions = (node && node.data && node.data.endActions) ? node.data.endActions : [];
+    const nodeEl = document.getElementById('node-'+currentEANodeId);
+    if (nodeEl) {
+      const btn = nodeEl.querySelector('.end-actions-btn');
+      if (btn) {
+        if (actions.length === 0) {
+          btn.innerHTML = '⚡ End Actions';
+          btn.classList.remove('has-actions');
+        } else {
+          // Show unique icons + count/type summary
+          const types = [...new Set(actions.map(a=>a.type))];
+          const icons = types.map(t=>EA_ICON[t]||'⚡').join('');
+          const typeNames = types.map(t=>END_ACTION_TYPES.find(x=>x.value===t)?.label||t);
+          const summary = typeNames.length <= 2 ? typeNames.join(' + ') : typeNames.length + ' actions';
+          btn.innerHTML = `${icons} ${summary} ✓`;
+          btn.classList.add('has-actions');
+        }
+      }
+    }
+  }
+  eaSnapshot = null;
+  document.getElementById('endActionsPanel').style.display = 'none';
+  currentEANodeId = null;
+};
+
+function getEANodeActions() {
+  if (!currentEANodeId) return [];
+  const n = editor.getNodeFromId(currentEANodeId);
+  return (n && n.data && n.data.endActions) ? n.data.endActions : [];
+}
+function setEANodeActions(actions) {
+  if (!currentEANodeId) return;
+  const n = editor.getNodeFromId(currentEANodeId);
+  if (!n) return;
+  n.data.endActions = actions;
+  editor.updateNodeDataFromId(currentEANodeId, n.data);
+}
+
+window.renderEndActionsList = function(actions) {
+  const c = document.getElementById('endActionsList');
+  if (!actions || actions.length === 0) {
+    c.innerHTML = '<div class="empty-actions">No end actions yet.<br>Click "+ Add Action" to automate post-call tasks.</div>';
+    return;
+  }
+  c.innerHTML = actions.map((a,idx) => `
+    <div class="action-row">
+      <div class="action-type-tabs">
+        ${END_ACTION_TYPES.map(t=>`<label>
+          <input type="radio" name="at_${idx}" value="${t.value}" ${a.type===t.value?'checked':''}
+            onchange="window.updateActionType(${idx},this.value)">
+          ${t.icon} ${t.label}
+        </label>`).join('')}
+      </div>
+      ${getActionFields(a.type, idx, a)}
+      <button class="remove-action-btn" onclick="window.removeEndAction(${idx})">✕ Remove</button>
+    </div>`).join('');
+};
+
+window.getActionFields = function(type, idx, a) {
+  switch(type) {
+    case 'trigger': return `
+      <div class="action-field"><label>Trigger Action</label>
+        <select onchange="window.updateActionField(${idx},'trigger_action',this.value)">
+          <option value="">Select...</option>
+          <option value="tag"          ${a.trigger_action==='tag'?'selected':''}>Add Tag</option>
+          <option value="remove_tag"   ${a.trigger_action==='remove_tag'?'selected':''}>Remove Tag</option>
+          <option value="set_schedule" ${a.trigger_action==='set_schedule'?'selected':''}>Set Schedule</option>
+          <option value="transfer"     ${a.trigger_action==='transfer'?'selected':''}>Transfer Call</option>
+          <option value="sms"          ${a.trigger_action==='sms'?'selected':''}>Send SMS</option>
+        </select>
+      </div>
+      <div class="action-field"><label>Tag / Value</label>
+        <input type="text" value="${a.tag_value||''}" oninput="window.updateActionField(${idx},'tag_value',this.value)" placeholder="Tag name or ID">
+      </div>
+      <div class="action-field"><label>Condition (optional)</label>
+        <input type="text" value="${a.condition||''}" oninput="window.updateActionField(${idx},'condition',this.value)" placeholder="e.g. call duration > 60s">
+      </div>`;
+    case 'webhook': return `
+      <div class="action-field"><label>Webhook URL (POST)</label>
+        <input type="text" value="${a.webhook_url||''}" oninput="window.updateActionField(${idx},'webhook_url',this.value)" placeholder="https://example.com/webhook">
+      </div>
+      <div class="action-field"><label>Authentication</label>
+        <select onchange="window.updateActionField(${idx},'auth_type',this.value)">
+          <option value="none"  ${(a.auth_type||'none')==='none'?'selected':''}>None</option>
+          <option value="basic" ${a.auth_type==='basic'?'selected':''}>Basic Auth</option>
+          <option value="token" ${a.auth_type==='token'?'selected':''}>Bearer Token</option>
+        </select>
+      </div>
+      <div class="action-field"><label>Custom Body (Mustache — CTM variables)</label>
+        <textarea rows="3" oninput="window.updateActionField(${idx},'webhook_body',this.value)"
+          placeholder='{"caller":"{{caller_number}}","name":"{{caller_name}}","duration":"{{duration}}"}'>${a.webhook_body||''}</textarea>
+      </div>
+      <div class="action-field"><label>Notes</label>
+        <input type="text" value="${a.webhook_notes||''}" oninput="window.updateActionField(${idx},'webhook_notes',this.value)" placeholder="Integration notes...">
+      </div>`;
+    case 'google_conversion': return `
+      <div class="action-field"><label>Conversion Label (from Google Ads)</label>
+        <input type="text" value="${a.conversion_label||''}" oninput="window.updateActionField(${idx},'conversion_label',this.value)" placeholder="Conversion label">
+      </div>
+      <div class="action-field"><label>Conversion Value (optional)</label>
+        <input type="number" value="${a.conversion_value||''}" oninput="window.updateActionField(${idx},'conversion_value',this.value)" placeholder="0.00">
+      </div>
+      <div class="action-field"><label>Min Duration to Count as Conversion (sec)</label>
+        <input type="number" value="${a.min_duration||''}" oninput="window.updateActionField(${idx},'min_duration',this.value)" placeholder="e.g. 60">
+      </div>`;
+    case 'email_notification': return `
+      <div class="action-field"><label>Recipients (comma-separated)</label>
+        <input type="text" value="${a.recipients||''}" oninput="window.updateActionField(${idx},'recipients',this.value)" placeholder="email@example.com">
+      </div>
+      <div class="action-field"><label>Subject</label>
+        <input type="text" value="${a.subject||''}" oninput="window.updateActionField(${idx},'subject',this.value)" placeholder="New call notification">
+      </div>
+      <div class="action-field"><label>Trigger Condition</label>
+        <select onchange="window.updateActionField(${idx},'email_trigger',this.value)">
+          <option value="all"       ${(a.email_trigger||'all')==='all'?'selected':''}>All calls</option>
+          <option value="answered"  ${a.email_trigger==='answered'?'selected':''}>Answered calls only</option>
+          <option value="missed"    ${a.email_trigger==='missed'?'selected':''}>Missed calls only</option>
+          <option value="voicemail" ${a.email_trigger==='voicemail'?'selected':''}>Voicemail left</option>
+        </select>
+      </div>
+      <div class="action-field">
+        <div class="checkbox-row">
+          <input type="checkbox" id="inc_${idx}" ${a.include_details?'checked':''}
+            onchange="window.updateActionField(${idx},'include_details',this.checked)">
+          <label for="inc_${idx}">Include caller info, duration, recording link</label>
         </div>
       </div>`;
-      node.html = html;
-      editor.updateNodeHtmlFromId(nodeId, html);
-    } catch {}
+    default: return '<p style="color:#5a7a9a;font-size:.8rem">Select an action type above.</p>';
   }
-  // Double-click label to edit inline
-  window.editLabel = function(spanElem) {
-    let old = spanElem.textContent;
-    let inp = document.createElement('input');
-    inp.type = 'text'; inp.value = old; inp.className='drawflow-node-label';
-    inp.onblur = inp.onkeydown = function(e) {
-      if(e.type==='blur' || (e.type==='keydown'&&e.key==='Enter')) {
-        spanElem.textContent = inp.value||old;
-        spanElem.style.display="inline";
-        inp.remove();
-      }
-    };
-    spanElem.parentNode.insertBefore(inp, spanElem);
-    spanElem.style.display="none";
-    inp.focus();
-    inp.setSelectionRange(0, old.length);
-  };
-  function getName() {
-    let d = new Date();
-    return "ctm_routing_"+d.getFullYear()+"-"+(d.getMonth()+1)+"-"+d.getDate()+"_"+d.getHours()+"-"+d.getMinutes()+".json";
+};
+
+window.updateActionType = function(idx, type) {
+  const actions = getEANodeActions();
+  actions[idx] = { type, trigger_action:'', tag_value:'', condition:'', webhook_url:'', webhook_body:'', webhook_notes:'', auth_type:'none', conversion_label:'', conversion_value:'', min_duration:'', recipients:'', subject:'', email_trigger:'all', include_details:true };
+  setEANodeActions(actions);
+  renderEndActionsList(actions);
+};
+window.updateActionField = function(idx, field, value) {
+  const actions = getEANodeActions();
+  if (!actions[idx]) return;
+  actions[idx][field] = value;
+  setEANodeActions(actions);
+};
+window.addEndAction = function() {
+  const actions = getEANodeActions();
+  actions.push({ type:'webhook', trigger_action:'', tag_value:'', condition:'', webhook_url:'', webhook_body:'', webhook_notes:'', auth_type:'none', conversion_label:'', conversion_value:'', min_duration:'', recipients:'', subject:'', email_trigger:'all', include_details:true });
+  setEANodeActions(actions);
+  renderEndActionsList(actions);
+};
+window.removeEndAction = function(idx) {
+  const actions = getEANodeActions();
+  actions.splice(idx,1);
+  setEANodeActions(actions);
+  renderEndActionsList(actions);
+};
+
+// ─────────────────────────────────────────────
+// Node context menu (click output port)
+// ─────────────────────────────────────────────
+function showNodeMenu(x, y, parentId, outIndex) {
+  const menu = document.getElementById('nodeMenu');
+  document.getElementById('nodeMenuSelect').innerHTML = NODE_TYPES_LIST.map(t=>`<option value="${t.value}">${t.label}</option>`).join('');
+  menu.style.left = (x+8)+'px'; menu.style.top = (y-10)+'px'; menu.style.display = 'block';
+  menu._parentId = parentId; menu._outIndex = outIndex;
+  document.getElementById('nodeMenuSelect').focus();
+}
+function hideNodeMenu() {
+  const m = document.getElementById('nodeMenu');
+  m.style.display = 'none'; m._parentId = m._outIndex = undefined;
+}
+document.getElementById('nodeMenuAddBtn').onclick = function() {
+  const m = document.getElementById('nodeMenu');
+  const type = document.getElementById('nodeMenuSelect').value;
+  if (m._parentId && type) addNodeWithDepth(type, Number(m._parentId), Number(m._outIndex));
+  hideNodeMenu();
+};
+document.getElementById('nodeMenuCancelBtn').onclick = hideNodeMenu;
+editor.precanvas.addEventListener('click', function(e) {
+  if (e.target.classList.contains('output')) {
+    const nd = e.target.closest('.drawflow-node');
+    const pId = parseInt(nd.id.replace('node-',''));
+    const outIdx = Array.from(nd.querySelectorAll('.output')).indexOf(e.target)+1;
+    const r = e.target.getBoundingClientRect();
+    showNodeMenu(r.right, r.top, pId, outIdx);
+    e.stopPropagation();
   }
-  function saveFlow() {
-    const flow = editor.export();
-    const blob = new Blob([JSON.stringify(flow,null,2)], {type: "application/json"});
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = getName();
-    document.body.appendChild(a);
-    a.click(); document.body.removeChild(a);
-  }
-  function loadFlow() {
-    document.getElementById('fileInput').value = null;
-    document.getElementById('fileInput').click();
-  }
-  function handleFile(evt) {
-    const file = evt.target.files[0];
-    if(!file) return;
-    const reader = new FileReader();
-    reader.onload = function(e) {
-      try {
-        const obj = JSON.parse(e.target.result);
-        for (let k in obj.drawflow.Home.data) {
-          let n = obj.drawflow.Home.data[k];
-          if (typeof n.name !== 'string') n.name = String(n.name || '');
-        }
-        editor.clear();
-        editor.import(obj);
-      } catch (ex) {
-        alert("Failed to load: "+ex);
-      }
-    }
-    reader.readAsText(file);
-  }
-  function showNodeMenu(x, y, parentId, outIndex) {
-    const menu = document.getElementById('nodeMenu');
-    const sel = document.getElementById('nodeMenuSelect');
-    // Look up the node data to determine type and notes output index
-    let n = editor.getNodeFromId(parentId);
-    if (n && typeof n.data === 'object' && typeof n.data.notesOutputIdx === 'number' && Number(outIndex)-1 === n.data.notesOutputIdx) {
-      sel.innerHTML = '<option value="Notes">Notes</option>';
-    } else {
-      sel.innerHTML = NODE_TYPES.filter(t => t.value !== 'Notes').map(t=>`<option value="${t.value}">${t.label}</option>`).join('');
-    }
-    menu.style.left = (x+12) + 'px';
-    menu.style.top = (y-10) + 'px';
-    menu.style.display = 'block';
-    menu.parentId = parentId;
-    menu.outIndex = outIndex;
-    sel.focus();
-  }
-  function hideNodeMenu() {
-    const menu = document.getElementById('nodeMenu');
-    menu.style.display = 'none';
-    menu.parentId = undefined;
-    menu.outIndex = undefined;
-  }
-  document.getElementById('nodeMenuAddBtn').onclick = function() {
-    const menu = document.getElementById('nodeMenu');
-    const type = document.getElementById('nodeMenuSelect').value;
-    if(menu.parentId && type) {
-      addNodeWithDepth(type, Number(menu.parentId), Number(menu.outIndex));
-    }
-    hideNodeMenu();
-  };
-  document.getElementById('nodeMenuCancelBtn').onclick = hideNodeMenu;
-  editor.precanvas.addEventListener("click", function(e) {
-    if (e.target.classList.contains("output")) {
-      const parentNodeDiv = e.target.closest(".drawflow-node");
-      const parentId = parseInt(parentNodeDiv.id.replace("node-", ""));
-      const outputsOnThisNode = Array.from(parentNodeDiv.querySelectorAll('.output'));
-      const outIndex = outputsOnThisNode.indexOf(e.target) + 1;
-      let rect = e.target.getBoundingClientRect();
-      showNodeMenu(rect.right, rect.top, parentId, outIndex);
-      e.stopPropagation();
-    }
+});
+document.body.addEventListener('mousedown', function(e) {
+  if (document.getElementById('nodeMenu').style.display==='block' &&
+      !document.getElementById('nodeMenu').contains(e.target)) hideNodeMenu();
+});
+
+// ─────────────────────────────────────────────
+// Auto Arrange — hierarchical tree layout
+// ─────────────────────────────────────────────
+function autoArrange() {
+  const data = editor.drawflow.drawflow.Home.data;
+  const nodes = Object.values(data);
+  if (nodes.length === 0) return;
+
+  // Build parent→children map and find in-degree
+  const children = {};
+  const inDegree = {};
+  nodes.forEach(n => { children[n.id] = []; inDegree[n.id] = 0; });
+  nodes.forEach(n => {
+    Object.values(n.outputs||{}).forEach(out => {
+      (out.connections||[]).forEach(conn => {
+        const cid = parseInt(conn.node);
+        if (children[n.id]) children[n.id].push(cid);
+        if (inDegree[cid] !== undefined) inDegree[cid]++;
+      });
+    });
   });
-  document.body.addEventListener("mousedown", function(e) {
-    const menu = document.getElementById('nodeMenu');
-    if(menu.style.display=="block" && !menu.contains(e.target)) hideNodeMenu();
-  });
-  function snapAllNodesToGrid() {
-    const grid = 32;
-    Object.values(editor.drawflow.drawflow.Home.data).forEach(function(n) {
-      let node = document.getElementById('node-' + n.id);
-      if (node) {
-        let l = parseInt(node.style.left), t = parseInt(node.style.top);
-        node.style.left = (Math.round(l / grid) * grid) + 'px';
-        node.style.top  = (Math.round(t / grid) * grid) + 'px';
-        n.pos_x = parseInt(node.style.left);
-        n.pos_y = parseInt(node.style.top);
-      }
+
+  // Topological BFS — assign column = max(parent col) + 1
+  const col = {};
+  nodes.forEach(n => { col[n.id] = 0; });
+  // Kahn's algorithm pass
+  const queue = nodes.filter(n => inDegree[n.id] === 0).map(n => n.id);
+  const inDegCopy = { ...inDegree };
+  const topoOrder = [];
+  while (queue.length) {
+    const id = queue.shift();
+    topoOrder.push(id);
+    (children[id]||[]).forEach(cid => {
+      col[cid] = Math.max(col[cid]||0, (col[id]||0)+1);
+      inDegCopy[cid]--;
+      if (inDegCopy[cid] === 0) queue.push(cid);
     });
   }
-  editor.on('nodeMoved', function() { setTimeout(snapAllNodesToGrid, 10); });
-  editor.on('import', function() { setTimeout(snapAllNodesToGrid, 100); });
+  // Any node not visited (cycle) — assign col based on current value
+  nodes.forEach(n => { if (!topoOrder.includes(n.id)) topoOrder.push(n.id); });
+
+  // Group by column, preserve relative vertical order within column
+  const colGroups = {};
+  topoOrder.forEach(id => {
+    const c = col[id]||0;
+    if (!colGroups[c]) colGroups[c] = [];
+    colGroups[c].push(id);
+  });
+
+  const COL_W = 290, ROW_H = 230, START_X = 60, START_Y = 60;
+  const colKeys = Object.keys(colGroups).map(Number).sort((a,b)=>a-b);
+
+  colKeys.forEach(c => {
+    const ids = colGroups[c];
+    const x = START_X + c * COL_W;
+    // Center the column vertically relative to total canvas height
+    ids.forEach((id, rowIdx) => {
+      const y = START_Y + rowIdx * ROW_H;
+      const el = document.getElementById('node-'+id);
+      if (el) { el.style.left = x+'px'; el.style.top = y+'px'; }
+      data[id].pos_x = x;
+      data[id].pos_y = y;
+    });
+  });
+
+  // Redraw all connections
+  nodes.forEach(n => editor.updateConnectionNodes('node-'+n.id));
+}
+
+// ─────────────────────────────────────────────
+// Grid snap
+// ─────────────────────────────────────────────
+function snapToGrid() {
+  const grid = 32;
+  const data = editor.drawflow.drawflow.Home.data;
+  Object.values(data).forEach(n => {
+    const el = document.getElementById('node-'+n.id);
+    if (el) {
+      const l = Math.round(parseInt(el.style.left)/grid)*grid;
+      const t = Math.round(parseInt(el.style.top)/grid)*grid;
+      el.style.left = l+'px'; el.style.top = t+'px';
+      n.pos_x = l; n.pos_y = t;
+    }
+  });
+}
+editor.on('nodeMoved', () => setTimeout(snapToGrid, 10));
+
+// ─────────────────────────────────────────────
+// Import — restore data-node attributes
+// ─────────────────────────────────────────────
+editor.on('import', function() {
+  setTimeout(function() {
+    snapToGrid();
+    const data = editor.drawflow.drawflow.Home.data;
+    Object.values(data).forEach(n => {
+      const el = document.getElementById('node-'+n.id);
+      if (el && n.data && n.data.type) el.setAttribute('data-node', n.data.type);
+    });
+  }, 80);
+});
+
+// ─────────────────────────────────────────────
+// Save / Load
+// ─────────────────────────────────────────────
+function saveFlow() {
+  const flow = editor.export();
+  const blob = new Blob([JSON.stringify(flow,null,2)],{type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  const d = new Date();
+  a.download = `ctm_routing_${d.getFullYear()}-${d.getMonth()+1}-${d.getDate()}.json`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+}
+function loadFlow() {
+  document.getElementById('fileInput').value = null;
+  document.getElementById('fileInput').click();
+}
+// ─────────────────────────────────────────────
+// Python Script Generator
+// ─────────────────────────────────────────────
+
+// Maps diagram node types to CTM action_type strings used in voice menu items
+const CTM_ACTION_TYPE = {
+  ReceivingNumber: 'PhysicalPhoneNumber',
+  Queue:           'CallQueue',
+  IVR:             'VoiceMenu',
+  SmartRouter:     'ConditionalRouter',
+  Voicemail:       'Voicemail',
+  NoAnswer:        'NoAnswer',
+  EndAction:       'Hangup'
+};
+
+// Maps diagram node types to CTM dial_route strings used in tracking number routing
+const CTM_DIAL_ROUTE = {
+  IVR:             'voice_menu',
+  Queue:           'call_queue',
+  ReceivingNumber: 'receiving_number',
+  SmartRouter:     'conditional_router',
+  Voicemail:       'voicemail'
+};
+const CTM_DIAL_ROUTE_ID_KEY = {
+  IVR:             'voice_menu_id',
+  Queue:           'call_queue_id',
+  ReceivingNumber: 'receiving_number_id',
+  SmartRouter:     'conditional_router_id',
+  Voicemail:       'voicemail_id'
+};
+
+function esc(s) { return String(s||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/\n/g,'\\n'); }
+
+function generatePythonScript() {
+  const flow = editor.export();
+  const nodes = flow.drawflow.Home.data;
+  if (Object.keys(nodes).length === 0) { alert('Flow is empty — add some nodes first.'); return; }
+
+  // Build graph: outConns[nodeId][outputIndex] = targetNodeId
+  const outConns = {}, childList = {}, inDeg = {};
+  Object.values(nodes).forEach(n => {
+    outConns[n.id] = {}; childList[n.id] = []; inDeg[n.id] = 0;
+    Object.entries(n.outputs || {}).forEach(([key, out]) => {
+      const idx = parseInt(key.replace('output_', ''));
+      (out.connections || []).forEach(c => {
+        const cid = parseInt(c.node);
+        outConns[n.id][idx] = cid;
+        childList[n.id].push(cid);
+      });
+    });
+  });
+
+  // Topological sort (Kahn's)
+  Object.values(nodes).forEach(n => childList[n.id].forEach(cid => inDeg[cid]++));
+  const q = Object.keys(nodes).filter(id => inDeg[parseInt(id)] === 0);
+  const order = [];
+  while (q.length) {
+    const id = q.shift(); order.push(parseInt(id));
+    childList[parseInt(id)].forEach(cid => { if (--inDeg[cid] === 0) q.push(String(cid)); });
+  }
+  Object.keys(nodes).forEach(id => { if (!order.includes(parseInt(id))) order.push(parseInt(id)); });
+
+  // ── Script header ─────────────────────────────────────────────────────────
+  const now = new Date().toLocaleString();
+  const lines = [
+`#!/usr/bin/env python3
+"""
+CTM Routing Flow Provisioning Script
+Generated: ${now}
+Tool: CTM Routing Planner
+
+This script provisions the routing flow in a live CTM account via the REST API.
+Resources are created in dependency order so that IDs are available for cross-linking.
+
+BEFORE RUNNING:
+  1. Fill in ACCOUNT_ID, API_KEY, and API_SECRET below
+  2. Install dependencies:  pip install requests
+  3. Run:  python3 ctm_flow_setup.py
+"""
+
+import requests
+import json
+import sys
+from base64 import b64encode
+
+# ── CONFIGURE BEFORE RUNNING ──────────────────────────────────────────────────
+ACCOUNT_ID = "YOUR_ACCOUNT_ID"   # CTM Account ID (numeric)
+API_KEY    = "YOUR_API_KEY"       # CTM API Key    (Settings → API)
+API_SECRET = "YOUR_API_SECRET"    # CTM API Secret (Settings → API)
+# ─────────────────────────────────────────────────────────────────────────────
+
+BASE  = f"https://api.calltrackingmetrics.com/api/v1/accounts/{ACCOUNT_ID}"
+HEADS = {
+    "Authorization": "Basic " + b64encode(f"{API_KEY}:{API_SECRET}".encode()).decode(),
+    "Content-Type": "application/json"
+}
+
+def post(path, data=None):
+    r = requests.post(BASE + path, headers=HEADS, json=data or {})
+    if not r.ok:
+        print(f"  ✗ POST {path} failed [{r.status_code}]: {r.text[:300]}")
+        r.raise_for_status()
+    return r.json()
+
+def patch(path, data):
+    r = requests.patch(BASE + path, headers=HEADS, json=data)
+    if not r.ok:
+        print(f"  ✗ PATCH {path} failed [{r.status_code}]: {r.text[:300]}")
+        r.raise_for_status()
+    return r.json()
+
+def put(path, data):
+    r = requests.put(BASE + path, headers=HEADS, json=data)
+    if not r.ok:
+        print(f"  ✗ PUT {path} failed [{r.status_code}]: {r.text[:300]}")
+        r.raise_for_status()
+    return r.json()
+
+# Stores CTM resource IDs keyed by diagram node ID
+node_ids = {}
+
+print("=" * 60)
+print("CTM Routing Flow Provisioning")
+print("=" * 60)
+`];
+
+  // ── Per-node code blocks ──────────────────────────────────────────────────
+  order.forEach((nodeId, stepIdx) => {
+    const n = nodes[nodeId];
+    const d = n.data || {};
+    const c = d.config || {};
+    const type = d.type;
+    const label = esc(d.label || type);
+    const notes = esc(d.notesValue || '');
+    const nk = `n${nodeId}`;
+    const out = outConns[nodeId] || {};
+    const step = stepIdx + 1;
+    const bar = '─'.repeat(Math.max(2, 56 - label.length - type.length));
+
+    lines.push(`\n# ── Step ${step}: ${label} (${type}) ${bar}`);
+
+    if (type === 'ReceivingNumber') {
+      lines.push(
+`print("\\nStep ${step}: Creating Receiving Number — ${label}")
+r = post("/receiving_numbers", {
+    "number": "${esc(c.phoneNumber || '+1XXXXXXXXXX')}",
+    "name": "${label}",
+    "description": "${notes}"
+})
+node_ids["${nk}"] = r["receiving_number"]["id"]
+print(f'  ✓ Receiving Number created: ID {node_ids["${nk}"]}')`);
+
+      // If simultaneous dial numbers exist, add them
+      if (c.simultaneousDial) {
+        const extra = c.simultaneousDial.split(',').map(x => x.trim()).filter(Boolean);
+        extra.forEach((num, i) => {
+          lines.push(
+`r2 = post("/receiving_numbers", {"number": "${esc(num)}", "name": "${label} (sim ${i+1})"})
+# Simultaneous dial partner: ${num}`);
+        });
+      }
+
+    } else if (type === 'Queue') {
+      const strategy = {round_robin:'round_robin', simultaneous:'simultaneous', priority:'priority', skills:'skills_based'}[c.ringStrategy] || 'round_robin';
+      const noAnswerOut = out[1] ? `node_ids.get("n${out[1]}", 0)` : '0';
+      const noAnswerType = out[1] && nodes[out[1]] ? CTM_ACTION_TYPE[nodes[out[1]].data.type] || 'Hangup' : 'Hangup';
+      lines.push(
+`print("\\nStep ${step}: Creating Call Queue — ${label}")
+r = post("/call_queues", {
+    "name": "${label}",
+    "ring_to": "${strategy}",
+    "timeout": ${c.ringTimeoutPerAgent || 20},
+    "max_queue_wait": ${c.maxWaitSeconds || 120},
+    "description": "${notes}"
+})
+node_ids["${nk}"] = r["call_queue"]["id"]
+print(f'  ✓ Queue created: ID {node_ids["${nk}"]}')
+
+# Set queue no-answer route
+patch(f'/queues/{node_ids["${nk}"]}', {
+    "default_action_type": "${noAnswerType}",
+    "default_action_id": ${noAnswerOut}
+})
+print("  ✓ No-answer route configured")`);
+
+    } else if (type === 'IVR') {
+      const voice = c.voice || 'alice';
+      const lang  = 'en-US';
+      let greetMsg;
+      if (c.greetingType === 'audio' && c.audioUrl)
+        greetMsg = esc(c.audioUrl);
+      else
+        greetMsg = `say:${voice}:${lang}:${esc(c.greetingText || 'Thank you for calling. Please choose from the following options.')}`;
+      const errMsg = `say:${voice}:${lang}:Sorry, I did not get that. Please try again.`;
+      const outputLabels = d.outputLabels || [];
+      const itemLines = outputLabels.map((lbl, i) => {
+        const outIdx = i + 1;
+        const tid = out[outIdx];
+        if (tid && nodes[tid]) {
+          const at = CTM_ACTION_TYPE[nodes[tid].data.type] || 'PhysicalPhoneNumber';
+          return `        {"input_key": "${outIdx}", "action_type": "${at}", "action_id": node_ids.get("n${tid}", 0)},  # ${esc(nodes[tid].data.label)}`;
+        }
+        return `        {"input_key": "${outIdx}", "action_type": "Hangup", "action_id": 0},  # (unconnected)`;
+      });
+      lines.push(
+`print("\\nStep ${step}: Creating IVR Voice Menu — ${label}")
+r = post("/voice_menus", {
+    "name": "${label}",
+    "play_message": "${greetMsg}",
+    "voice": "${voice}",
+    "lang": "${lang}",
+    "barge_in": ${c.interruptible !== false ? 1 : 0},
+    "input_timeout": ${c.timeoutSeconds || 5},
+    "prompt_retries": ${c.maxRetries || 3},
+    "error_message": "${errMsg}",
+    "items": [
+${itemLines.join('\n')}
+    ]
+})
+node_ids["${nk}"] = r["voice_menu"]["id"]
+print(f'  ✓ IVR Voice Menu created: ID {node_ids["${nk}"]}')`);
+
+    } else if (type === 'SmartRouter') {
+      const outputLabels = d.outputLabels || [];
+      const defaultTid = out[1];
+      const defaultNk  = defaultTid ? `n${defaultTid}` : null;
+      const defaultType = defaultTid && nodes[defaultTid] ? CTM_ACTION_TYPE[nodes[defaultTid].data.type] || 'Hangup' : 'Hangup';
+      const ruleComments = outputLabels.map((lbl, i) => {
+        const tid = out[i+1];
+        const dest = tid && nodes[tid] ? esc(nodes[tid].data.label) : '(unconnected)';
+        return `    # Rule ${i+1}: "${esc(lbl || `Condition ${i+1}`)}" → ${dest}  (node_ids.get("n${tid||0}", 0))`;
+      }).join('\n');
+      lines.push(
+`print("\\nStep ${step}: Creating Smart Router — ${label}")
+# Routing strategy: ${c.routingStrategy || 'not specified'}
+# ${c.conditionCount || '?'} conditions — see notes below
+# TODO: Define routing_rules array conditions based on your strategy
+# ${esc(c.conditionNotes || 'No condition notes captured')}
+routing_rules = [
+${ruleComments}
+    # Each rule needs: {"conditions": [...], "action_type": "...", "action_id": ...}
+    # See: https://postman.calltrackingmetrics.com for routing_rules schema
+]
+r = post("/conditional_routers", {
+    "conditional_router": {
+        "name": "${label}",
+        "description": "${esc(c.conditionNotes || '')}",
+        "routing_rules": routing_rules,
+        "router_default_type": "${defaultType}",
+        "router_default_id": node_ids.get("${defaultNk || 'NONE'}", 0),
+        "use_enhanced_caller_id": False
+    }
+})
+node_ids["${nk}"] = r["conditional_router"]["id"]
+print(f'  ✓ Smart Router created: ID {node_ids["${nk}"]}')`);
+
+    } else if (type === 'Voicemail') {
+      const voice = 'alice';
+      let greetMsg;
+      if (c.greetingType === 'audio' && c.greetingAudioUrl)
+        greetMsg = esc(c.greetingAudioUrl);
+      else if (c.greetingType === 'tts' && c.greetingText)
+        greetMsg = `say:${voice}:en-US:${esc(c.greetingText)}`;
+      else
+        greetMsg = '';
+      lines.push(
+`print("\\nStep ${step}: Voicemail — ${label}")
+# Voicemail boxes are destinations within CTM; reference by ID when setting dial routes
+# Greeting: ${greetMsg || '(default system greeting)'}
+# Email transcription: ${c.emailTranscription ? 'Yes → ' + esc(c.notificationEmail || '') : 'No'}
+# Max duration: ${c.maxDuration || 60}s
+# TODO: Retrieve or create voicemail box ID and set below
+node_ids["${nk}"] = 0  # ← Replace with your CTM Voicemail box ID
+print(f'  ⚠ Voicemail "{label}" — set node_ids["${nk}"] to your CTM voicemail ID')`);
+
+    } else if (type === 'NoAnswer') {
+      const action = c.noAnswerAction || 'voicemail';
+      const tid = out[1];
+      lines.push(
+`print("\\nStep ${step}: No Answer Branch — ${label}")
+# Action: ${action} | Max rings: ${c.maxRings || 30}s
+# This is configured as the no_answer/default_action on the upstream Queue or Tracking Number
+# Destination node: ${tid && nodes[tid] ? esc(nodes[tid].data.label) : '(unconnected)'}  ID ref: node_ids.get("n${tid||0}", 0)
+node_ids["${nk}"] = node_ids.get("n${tid||0}", 0)  # propagate destination ID
+print("  ℹ No Answer Branch handled via upstream queue default_action")`);
+
+    } else if (type === 'TrackingNumber') {
+      const numType = c.numberType || 'local';
+      const areaCode = c.areaCode || 'XXX';
+      let purchaseBlock;
+      if (numType === 'tollfree') {
+        purchaseBlock =
+`# Search for available toll-free number then purchase
+search = requests.get(f"{BASE}/numbers/search.json?country=US&searchby=tollfree&per_page=10", headers=HEADS).json()
+if not search.get("numbers"):
+    print("  ✗ No toll-free numbers available"); sys.exit(1)
+toll_number = search["numbers"][0]
+print(f"  Using toll-free: {toll_number}")
+r = post("/numbers", {"phone_number": toll_number, "test": False})`;
+      } else {
+        purchaseBlock =
+`r = post("/numbers/areacode", {"area_code": "${areaCode}", "test": False})`;
+      }
+
+      // Find first downstream node and its type for dial_route
+      const tid = out[1];
+      const tnode = tid && nodes[tid] ? nodes[tid] : null;
+      const ttype = tnode ? tnode.data.type : null;
+      const tLabel = tnode ? esc(tnode.data.label) : 'none';
+      const drType = ttype ? (CTM_DIAL_ROUTE[ttype] || 'receiving_number') : null;
+      const drIdKey = ttype ? (CTM_DIAL_ROUTE_ID_KEY[ttype] || 'receiving_number_id') : null;
+      const tnk = tid ? `n${tid}` : null;
+
+      // Direct receiving number: use the simpler /add endpoint
+      const isDirectRN = ttype === 'ReceivingNumber';
+      let routingBlock;
+      if (isDirectRN && tnk) {
+        routingBlock =
+`# Direct routing: add receiving number to tracking number
+post(f'/numbers/{node_ids["${nk}"]}/receiving_numbers/{node_ids["${tnk}"]}/add')
+print(f'  ✓ Receiving number linked to tracking number')`;
+      } else if (drType && tnk) {
+        routingBlock =
+`# Set dial route → ${tLabel} (${ttype})
+put(f'/numbers/{node_ids["${nk}"]}/dial_routes', {
+    "virtual_phone_number.dial_route": "${drType}",
+    "virtual_phone_number.${drIdKey}": node_ids.get("${tnk}", 0)
+})
+print(f'  ✓ Dial route set to ${tLabel}')`;
+      } else {
+        routingBlock = `# No downstream connection — configure routing manually in CTM`;
+      }
+
+      // Update number settings
+      lines.push(
+`print("\\nStep ${step}: Purchasing Tracking Number — ${label}")
+print(f"  Area code: ${areaCode} | Type: ${numType} | Campaign: ${esc(c.campaignSource || '')}")
+${purchaseBlock}
+node_ids["${nk}"] = r["id"]
+print(f'  ✓ Tracking Number purchased: {r.get("number","?")}  ID: {node_ids["${nk}"]}')
+
+# Update tracking number settings
+post(f'/numbers/{node_ids["${nk}"]}/update_number', {
+    "name": "${label}",
+    ${c.campaignSource ? `"google_campaign": "${esc(c.campaignSource)}",` : ''}
+    "sms_enabled": False
+})
+${routingBlock}
+${c.whisperEnabled && c.whisperMessage ? `# Whisper message: "${esc(c.whisperMessage)}" — configure in CTM number settings` : ''}`);
+
+    } else if (type === 'EndAction') {
+      const endActions = d.endActions || [];
+      if (endActions.length === 0) {
+        lines.push(`# End Action node: ${label} — no actions configured`);
+      } else {
+        endActions.forEach((ea, ei) => {
+          if (ea.type === 'trigger') {
+            lines.push(
+`print("\\nStep ${step}.${ei+1}: Creating Trigger — ${label} (${ea.trigger_action || 'trigger'})")
+r = post("/triggers", {
+    "automator": {
+        "name": "${label}",
+        "position": "end",
+        "delay_seconds": 0,
+        "routing_rules": [
+            # TODO: Add trigger conditions/actions
+            # Trigger action: ${ea.trigger_action || '?'} | Value: ${esc(ea.tag_value || '')}
+            # Condition: ${esc(ea.condition || 'none')}
+        ]
+    }
+})
+node_ids["${nk}_trigger_${ei}"] = r.get("automator", {}).get("id", 0)
+print(f'  ✓ Trigger created: ID {node_ids["${nk}_trigger_${ei}"]}')`);
+          } else if (ea.type === 'webhook') {
+            lines.push(
+`print("\\nStep ${step}.${ei+1}: Webhook End Action — ${label}")
+# Webhook URL: ${esc(ea.webhook_url || 'NOT SET')}
+# Auth type: ${ea.auth_type || 'none'}
+# Body template: ${esc(ea.webhook_body || '').substring(0, 80)}
+# Configure this as a Trigger in CTM pointing to the webhook above
+# or wire it directly in the routing node's End Actions in the CTM UI`);
+          } else if (ea.type === 'google_conversion') {
+            lines.push(
+`print("\\nStep ${step}.${ei+1}: Google Conversion — ${label}")
+# Conversion Label: ${esc(ea.conversion_label || 'NOT SET')}
+# Conversion Value: ${ea.conversion_value || '0'}
+# Min Duration: ${ea.min_duration || '0'}s
+# Configure Google Ads conversion tracking in CTM: Settings → Integrations → Google Ads`);
+          } else if (ea.type === 'email_notification') {
+            lines.push(
+`print("\\nStep ${step}.${ei+1}: Email Notification — ${label}")
+# Recipients: ${esc(ea.recipients || 'NOT SET')}
+# Subject: ${esc(ea.subject || '')}
+# Trigger: ${ea.email_trigger || 'all'}
+# Configure via CTM Triggers with email action`);
+          }
+        });
+      }
+    }
+  });
+
+  // ── Footer ────────────────────────────────────────────────────────────────
+  lines.push(`
+print("\\n" + "=" * 60)
+print("✅ Provisioning complete!")
+print("=" * 60)
+print("\\nCreated resource IDs:")
+for k, v in node_ids.items():
+    print(f"  {k}: {v}")
+print("\\nNext steps:")
+print("  1. Log into CTM and verify each resource was created correctly")
+print("  2. Assign tracking numbers to your campaigns / sources")
+print("  3. Test incoming calls through the full flow")
+`);
+
+  // Download as .py file
+  const script = lines.join('\n');
+  const blob = new Blob([script], { type: 'text/x-python' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'ctm_flow_setup.py';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  console.log('Script generated:', script.split('\n').length, 'lines');
+}
+
+function handleFile(evt) {
+  const file = evt.target.files[0]; if(!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const obj = JSON.parse(e.target.result);
+      for (const k in obj.drawflow.Home.data) {
+        const n = obj.drawflow.Home.data[k];
+        if (typeof n.name !== 'string') n.name = String(n.name||'');
+      }
+      editor.clear();
+      editor.import(obj);
+    } catch(ex) { alert('Failed to load: '+ex); }
+  };
+  reader.readAsText(file);
+}
 </script>
 </body>
 </html>
