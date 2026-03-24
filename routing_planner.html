@@ -36,6 +36,13 @@
     .drawflow-node[data-node="EndAction"]      { border:2px solid #5fd18a!important; background:#152520; }
     .drawflow .output:hover, .drawflow .input:hover { box-shadow:0 0 7px 2px #01BDF6; }
 
+    /* Override Drawflow's default background:red selected state */
+    .drawflow .drawflow-node.selected {
+      background: inherit !important;
+      outline: 2px solid rgba(1,189,246,0.55) !important;
+      box-shadow: 0 0 0 4px rgba(1,189,246,0.1), 0 0 20px rgba(1,189,246,0.08) !important;
+    }
+
     /* ── Node inner layout ── */
     .node-inner { padding:10px 12px 6px 12px; }
     .node-type-badge { font-size:9px; font-weight:900; letter-spacing:.08em; text-transform:uppercase; color:#5a7a9a; margin-bottom:3px; }
@@ -67,6 +74,8 @@
     .node-footer-btn.configured { color:#5fd18a; }
     .node-footer-btn.end-actions-btn.has-actions { color:#5fd18a; }
     .node-footer-btn.end-actions-btn.has-actions:hover { background:#1a2e20; }
+    .node-footer-btn.copy-btn { flex:0 0 28px; font-size:.9rem; color:#4a6a8a; }
+    .node-footer-btn.copy-btn:hover { color:#01BDF6; }
 
     /* ── Node context menu ── */
     #nodeMenu { display:none; position:fixed; z-index:99; background:#1a2535; border:1.5px solid #01BDF6; border-radius:8px; color:#fff; min-width:190px; font-size:.9rem; box-shadow:0 4px 20px #0009; padding:12px; }
@@ -505,6 +514,8 @@ function buildNodeHTML(type, label, outputLabels, notesValue, configData, endAct
     ? `<button class="node-footer-btn" onclick="event.stopPropagation();window.openNodeConfig(parseInt(this.closest('.drawflow-node').id.replace('node-','')))">⚙ Configure</button>`
     : '';
 
+  const copyBtn = `<button class="node-footer-btn copy-btn" title="Duplicate this node" onclick="event.stopPropagation();window.copyNode(parseInt(this.closest('.drawflow-node').id.replace('node-','')))">⎘</button>`;
+
   return `<div class="node-inner">
     <div class="node-type-badge">${LABEL_MAP[type]||type}</div>
     <span class="drawflow-node-label" onclick="event.stopPropagation();window.editLabel(this)">${label}</span>
@@ -519,6 +530,7 @@ function buildNodeHTML(type, label, outputLabels, notesValue, configData, endAct
       onclick="event.stopPropagation();window.showEndActionsPanel(parseInt(this.closest('.drawflow-node').id.replace('node-','')))">
       ${eaBtnText}
     </button>
+    ${copyBtn}
   </div>`;
 }
 
@@ -629,6 +641,23 @@ window.editLabel = function(span) {
   inp.focus(); inp.select();
 };
 
+// Copy / duplicate a node with all its data
+window.copyNode = function(nodeId) {
+  const node = editor.getNodeFromId(nodeId);
+  if (!node) return;
+  const type = node.data.type;
+  const inputs  = Object.keys(node.inputs  || {}).length;
+  const outputs = Object.keys(node.outputs || {}).length;
+  const newData = JSON.parse(JSON.stringify(node.data));
+  newData.label = node.data.label + ' (copy)';
+  const html = buildNodeHTML(type, newData.label, newData.outputLabels||[], newData.notesValue||'', newData.config||{}, newData.endActions||[]);
+  const newId = editor.addNode(String(type), inputs, outputs, node.pos_x + 48, node.pos_y + 48, '', newData, html);
+  setTimeout(() => {
+    const el = document.getElementById('node-' + newId);
+    if (el) el.setAttribute('data-node', type);
+  }, 10);
+};
+
 // ─────────────────────────────────────────────
 // Node Configure panel
 // ─────────────────────────────────────────────
@@ -715,6 +744,101 @@ window.refreshConfigVisibility = function() {
   });
 };
 
+// Generates a human-readable multi-line notes string from saved config
+function generateNotesFromConfig(type, config) {
+  const c = config || {};
+  const lines = [];
+  const add = (label, key, map) => {
+    const raw = c[key];
+    if (raw === undefined || raw === null || raw === '') return;
+    if (raw === true)  { lines.push(`${label}: Yes`); return; }
+    if (raw === false) { lines.push(`${label}: No`);  return; }
+    const v = map ? (map[raw] || raw) : raw;
+    lines.push(`${label}: ${v}`);
+  };
+  switch (type) {
+    case 'TrackingNumber':
+      add('Number',       'phoneNumber');
+      add('Campaign',     'campaignSource');
+      add('Type',         'numberType',   {direct:'Direct',pool:'Pool',ported:'Ported'});
+      add('Recording',    'recordingEnabled');
+      add('Whisper',      'whisperEnabled');
+      add('Whisper Text', 'whisperMessage');
+      add('Transcription','transcriptionEnabled');
+      break;
+    case 'IVR':
+      add('Greeting',       'greetingType', {tts:'Text-to-Speech',audio:'Audio File',none:'Silent (no greeting)'});
+      add('Script',         'greetingText');
+      add('Audio URL',      'audioUrl');
+      add('Voice',          'voice');
+      add('Interruptible',  'interruptible');
+      add('Timeout (sec)',  'timeoutSeconds');
+      add('Max Retries',    'maxRetries');
+      add('On Timeout',     'onTimeout',    {replay:'Replay Menu',hangup:'Hangup',default_route:'Default Route'});
+      add('On Invalid Key', 'onInvalid',    {replay:'Replay Menu',hangup:'Hangup',default_route:'Default Route'});
+      add('# Keypress Options','numKeypresses');
+      add('Nested IVRs',    'nestedIVRs');
+      add('Multi-language', 'multiLanguage');
+      add('Languages',      'languageNotes');
+      break;
+    case 'Queue':
+      add('Ring Strategy',       'ringStrategy',       {round_robin:'Round Robin',simultaneous:'Simultaneous (all ring)',priority:'Priority Order',skills:'Skills-Based'});
+      add('Ring Timeout/Agent',  'ringTimeoutPerAgent');
+      add('Max Wait (sec)',       'maxWaitSeconds');
+      add('Agent Count',         'agentCount');
+      add('Receiving Numbers',   'receivingNumbers');
+      add('Hold Music',          'holdMusic',          {default:'Default',custom:'Custom URL',none:'Silence'});
+      add('Hold Music URL',      'holdMusicUrl');
+      add('Announcements',       'announcements',      {none:'None',position:'Caller Position',wait_time:'Estimated Wait Time'});
+      add('Announce Freq (sec)', 'announcementFreq');
+      add('Callback Offer',      'callbackEnabled');
+      add('Business Hours',      'businessHours',      {always:'24/7 Always Open',schedule:'Use Schedule'});
+      add('Schedule Name',       'scheduleName');
+      add('After-Hours Route',   'afterHoursRoute',    {voicemail:'Voicemail',message:'Play Message + Hangup',queue:'Secondary Queue',number:'External Number'});
+      break;
+    case 'SmartRouter':
+      add('Strategy',          'routingStrategy',  {geographic:'Geographic',time_based:'Time-Based',round_robin:'Round Robin',tag_based:'Tag-Based',priority:'Priority',caller_id:'Caller ID',combined:'Combined'});
+      add('Evaluation',        'evaluationOrder',  {first_match:'First Match Wins',weighted:'Weighted / Scored'});
+      add('Condition Count',   'conditionCount');
+      add('Conditions',        'conditionNotes');
+      add('Fallback Route',    'fallbackRoute');
+      add('Requires CRM',      'requiresCRM');
+      add('CRM / Data Source', 'crmNotes');
+      add('Geo Lookup',        'requiresGeo');
+      break;
+    case 'NoAnswer':
+      add('Max Rings (sec)',  'maxRings');
+      add('Action',          'noAnswerAction',  {voicemail:'Route to Voicemail',transfer:'Transfer to Number',queue:'Overflow Queue',message:'Play Message + Hangup',hangup:'Hangup'});
+      add('Transfer To',     'forwardTo');
+      add('Missed Call Alert','missedCallAlert');
+      add('Alert Email',     'alertEmail');
+      add('SMS Alert',       'smsAlert');
+      add('SMS To',          'smsTo');
+      break;
+    case 'Voicemail':
+      add('Greeting',         'greetingType',     {default:'Default System Greeting',tts:'Text-to-Speech',audio:'Custom Audio File'});
+      add('Greeting Script',  'greetingText');
+      add('Audio URL',        'greetingAudioUrl');
+      add('Max Duration (sec)','maxDuration');
+      add('Email Transcription','emailTranscription');
+      add('Delivery Email',   'notificationEmail');
+      add('SMS Notification', 'smsNotification');
+      add('SMS To',           'smsNumber');
+      break;
+    case 'ReceivingNumber':
+      add('Agent / Team',       'contactName');
+      add('Number',             'phoneNumber');
+      add('Ring Timeout (sec)', 'ringTimeout');
+      add('Call Screening',     'callScreening');
+      add('Whisper Message',    'callWhisper');
+      add('Simultaneous Dial',  'simultaneousDial');
+      add('Caller ID',          'callerId',  {caller:"Show Caller's Number",tracking:'Show Tracking Number',custom:'Custom Number'});
+      add('Custom Caller ID',   'customCallerId');
+      break;
+  }
+  return lines.join('\n');
+}
+
 window.saveNodeConfig = function() {
   if (!currentConfigNodeId) return;
   const n = editor.getNodeFromId(currentConfigNodeId);
@@ -722,20 +846,31 @@ window.saveNodeConfig = function() {
   const type = n.data.type;
   const config = n.data.config || {};
   const summary = getConfigSummary(type, config);
-  // Update the summary badge in the node DOM
+
+  // Auto-populate notes field with human-readable config summary
+  const notesText = generateNotesFromConfig(type, config);
+  if (notesText) {
+    n.data.notesValue = notesText;
+    editor.updateNodeDataFromId(currentConfigNodeId, n.data);
+  }
+
   const nodeEl = document.getElementById('node-'+currentConfigNodeId);
   if (nodeEl) {
+    // Update summary badge
     const summaryDiv = nodeEl.querySelector('.node-config-summary');
     if (summaryDiv) {
       summaryDiv.innerHTML = summary
         ? `<span class="config-badge configured">⚙ ${summary}</span>`
         : '';
     }
-    // Mark configure button as configured
-    const cfgBtn = nodeEl.querySelectorAll('.node-footer-btn')[0];
-    if (cfgBtn && !cfgBtn.classList.contains('end-actions-btn')) {
-      cfgBtn.classList.toggle('configured', !!summary);
+    // Update notes textarea
+    if (notesText) {
+      const ta = nodeEl.querySelector('.node-notes-field');
+      if (ta) ta.value = notesText;
     }
+    // Mark configure button as configured
+    const cfgBtn = nodeEl.querySelector('.node-footer-btn:not(.end-actions-btn):not(.copy-btn)');
+    if (cfgBtn) cfgBtn.classList.toggle('configured', !!summary);
   }
   configSnapshot = null;
   document.getElementById('nodeConfigPanel').style.display = 'none';
