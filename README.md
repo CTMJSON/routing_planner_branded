@@ -1,3 +1,6 @@
+<img width="1191" height="833" alt="Screenshot 2026-03-23 at 9 31 16 PM" src="https://github.com/user-attachments/assets/f25ae66f-6448-42cd-850f-d9159fce9052" />
+
+
 # CTM Routing Planner — Visual Call Flow Designer
 
 A web-based drag-and-drop call flow designer built for scoping and documenting CTM (CallTrackingMetrics) routing configurations. Designed for solutions architects to visually map IVRs, queues, smart routers, and post-call automation before implementation.
