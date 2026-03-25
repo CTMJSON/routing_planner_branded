@@ -53,6 +53,7 @@
     /* Galaxy Grey dashed — fallback path */
     .drawflow-node[data-node="NoAnswer"]       { border:2px dashed #4a5c6e!important; background:#131a20; }
     /* Supernova Lime — terminal actions */
+    .drawflow-node[data-node="TrackingSource"]  { border:2px solid #01BDF6!important; background:#16294F!important; }
     .drawflow-node[data-node="EndAction"]      { border:2px solid #D6DA01!important; background:#0d1200; }
 
     /* Port hover glow */
@@ -83,6 +84,9 @@
     .output-label-txt::placeholder { color:#2a4a60; }
     .add-path-btn { background:#162900; color:#D6DA01; border:1px solid #D6DA0188; padding:2px 8px; border-radius:4px; cursor:pointer; font-size:.75rem; font-weight:bold; margin-top:2px; align-self:flex-start; transition:all .15s; }
     .add-path-btn:hover { background:#D6DA01; color:#16294F; }
+    .remove-path-btn { display:none; margin-left:8px; background:#1e1010; color:#c07070; border:1px solid #3a1010; border-radius:4px; cursor:pointer; font-size:.9em; padding:2px 7px; line-height:1; transition:background .15s, color .15s, border-color .15s; }
+    .remove-path-btn:hover { background:#c03030; color:#fff; border-color:#c03030; }
+    .output-slot-row:hover .remove-path-btn { display:inline-block; }
 
     /* Notes textarea */
     .node-notes-field { width:100%; min-height:32px; max-height:70px; font-size:.78rem; border-radius:4px; background:#0d1b30; color:#6888a0; padding:3px 6px; border:1px dashed #0E5E8C55; resize:vertical; outline:none; font-family:inherit; line-height:1.2; margin-top:3px; display:block; }
@@ -207,6 +211,7 @@
     <img src="https://media.ffycdn.net/us/calltrackingmetrics/6CpdkYmzxL6U2TMLMKCo.png?width=180" alt="CTM">
     <label>Node type:</label>
     <select id="nodeType">
+      <option value="TrackingSource">Tracking Source</option>
       <option value="TrackingNumber">Tracking Number</option>
       <option value="IVR">IVR Menu</option>
       <option value="Queue">Queue</option>
@@ -301,16 +306,29 @@
 
 <script src="drawflow.min.js"></script>
 <script>
+// DEBUG: Confirm JS loaded
+console.log('Loaded routing_planner.html!');
 // ─────────────────────────────────────────────
 // Constants & schema
 // ─────────────────────────────────────────────
 const LABEL_MAP = {
   TrackingNumber:'Tracking Number', IVR:'IVR Menu', VoiceBot:'Voice Bot', Queue:'Queue',
+  TrackingSource: 'Tracking Source',
+  TrackingNumber:'Tracking Number', IVR:'IVR Menu', Queue:'Queue',
   SmartRouter:'Smart Router', ReceivingNumber:'Receiving Number',
   Voicemail:'Voicemail', NoAnswer:'No Answer Branch', EndAction:'End Action'
 };
 
 const NODE_TYPES_LIST = [
+  {value:'TrackingSource',label:'Tracking Source'},
+  {value:'TrackingNumber',label:'Tracking Number'},
+  {value:'IVR',label:'IVR Menu'},
+  {value:'Queue',label:'Queue'},
+  {value:'SmartRouter',label:'Smart Router'},
+  {value:'ReceivingNumber',label:'Receiving Number'},
+  {value:'Voicemail',label:'Voicemail'},
+  {value:'NoAnswer',label:'No Answer Branch'},
+  {value:'EndAction',label:'End Action'},
   {value:'IVR',label:'IVR Menu'}, {value:'Queue',label:'Queue'},
   {value:'SmartRouter',label:'Smart Router'}, {value:'ReceivingNumber',label:'Receiving Number'},
   {value:'Voicemail',label:'Voicemail'}, {value:'NoAnswer',label:'No Answer Branch'},
@@ -380,6 +398,8 @@ const NODE_CONFIG_SCHEMA = {
       { title: 'Receiving Numbers', fields: [
         { key:'receivingNumbers', label:'Agent / Receiving Numbers (one per line)', type:'textarea', ph:'+1 (555) 100-0001\n+1 (555) 100-0002' },
         { key:'agentCount',       label:'Approx. number of agents/lines',           type:'number', ph:'3' },
+        { key:'agentType',        label:'Primary Agent Type', type:'select',
+          opts:[{v:'softphone',l:'Softphone (browser-based)'},{v:'receiving',l:'Receiving Number'}], default:'receiving' },
       ]},
       { title: 'Caller Experience', fields: [
         { key:'holdMusic',     label:'Hold Music', type:'select',
@@ -488,7 +508,40 @@ const NODE_CONFIG_SCHEMA = {
     ]
   },
 
-  EndAction: { title:'End Action', sections:[] }  // handled by its own panel
+  EndAction: { title:'End Action', sections:[] },  // handled by its own panel
+  TrackingSource: {
+    title: '📈 Tracking Source — Configuration Scope',
+    sections: [
+      { title: 'Channel & Condition Preset', fields: [
+        { key:'channelPreset', label:'Channel/Condition Preset', type:'select',
+          opts:[
+            {v:'google_ads', l:'Google Ads (PPC)'},
+            {v:'bing_ads', l:'Bing Ads'},
+            {v:'facebook', l:'Facebook'},
+            {v:'instagram', l:'Instagram'},
+            {v:'linkedin', l:'LinkedIn'},
+            {v:'organic_search', l:'Organic Search'},
+            {v:'organic_social', l:'Organic Social'},
+            {v:'direct', l:'Direct'},
+            {v:'referral', l:'Referral'},
+            {v:'other', l:'Other'}
+          ] }
+      ]},
+      { title: 'Source Type', fields: [
+        { key:'sourceType', label:'Source Location', type:'select',
+          opts:[{v:'onsite',l:'Onsite (on your website)'},{v:'offsite',l:'Offsite (external source)'}] }
+      ]},
+      { title: 'URLs', fields: [
+        { key:'landingUrl', label:'Landing URL (pattern or exact)', type:'text', ph:'/thank-you or https://yoursite.com/landing' },
+        { key:'referralUrl', label:'Referral URL (optional)', type:'text', ph:'Referrer domain/path' }
+      ]},
+      { title: 'Position & Attribution', fields: [
+        { key:'position', label:'Position (1-1000)', type:'number', ph:'100', fieldHint:'Higher number values mean a lower priority for DNI (dynamic number insertion).', min:1, max:1000 },
+        { key:'touchType', label:'Attribution', type:'select',
+          opts:[{v:'first',l:'First Touch'},{v:'last',l:'Last Touch'}] }
+      ]}
+    ]
+  }
 };
 
 // Generates a 1-line summary for a node's configured data
@@ -520,6 +573,7 @@ function getConfigSummary(type, config) {
       const parts = [];
       if (c.ringStrategy) parts.push(strategyLabels[c.ringStrategy]||c.ringStrategy);
       if (c.agentCount) parts.push(c.agentCount + ' agents');
+      if (c.agentType) parts.push(c.agentType === 'softphone' ? 'Softphone' : 'Receiving');
       if (c.maxWaitSeconds) parts.push(c.maxWaitSeconds + 's max');
       if (c.callbackEnabled) parts.push('Callback');
       if (c.businessHours === 'schedule' && c.scheduleName) parts.push(c.scheduleName);
@@ -554,6 +608,29 @@ function getConfigSummary(type, config) {
       if (c.callScreening) parts.push('Screened');
       return parts.filter(Boolean).join(' · ') || null;
     }
+    case 'TrackingSource': {
+  const presetLabels = {
+    google_ads: 'Google Ads (PPC)',
+    bing_ads: 'Bing Ads',
+    facebook: 'Facebook',
+    instagram: 'Instagram',
+    linkedin: 'LinkedIn',
+    organic_search: 'Organic Search',
+    organic_social: 'Organic Social',
+    direct: 'Direct',
+    referral: 'Referral',
+    other: 'Other'
+  };
+  const parts = [];
+  if (c.channelPreset && presetLabels[c.channelPreset])
+    parts.push(presetLabels[c.channelPreset]);
+  if (c.sourceType) parts.push({onsite:'Onsite',offsite:'Offsite'}[c.sourceType]);
+  if (c.landingUrl) parts.push('Landing: ' + c.landingUrl);
+  if (c.referralUrl) parts.push('Ref: ' + c.referralUrl);
+  if (c.position) parts.push('Pos: ' + c.position);
+  if (c.touchType) parts.push(c.touchType === 'first' ? 'First Touch' : 'Last Touch');
+  return parts.filter(Boolean).join(' · ') || null;
+} 
     default: return null;
   }
 }
@@ -574,7 +651,7 @@ document.addEventListener('keydown', function(e) {
   }
 });
 
-let nodeCount = { TrackingNumber:1,IVR:1,Queue:1,SmartRouter:1,ReceivingNumber:1,Voicemail:1,NoAnswer:1,EndAction:1 };
+let nodeCount = { TrackingSource:1,TrackingNumber:1,IVR:1,Queue:1,SmartRouter:1,ReceivingNumber:1,Voicemail:1,NoAnswer:1,EndAction:1 };
 
 // ─────────────────────────────────────────────
 // Node HTML builder
@@ -587,14 +664,15 @@ function buildNodeHTML(type, label, outputLabels, notesValue, configData, endAct
     const addBtn = type === 'IVR'
       ? `<button class="add-path-btn" onclick="event.stopPropagation();window.addIVROutput(this)">+ Add Path</button>`
       : '';
-    outputInputsHTML = `<div class="output-slot-list">
-      ${labels.map((v,i) => `<div class="output-slot-row">
-        <input type="text" class="output-label-txt" value="${(v||'').replace(/"/g,'&quot;')}"
-          oninput="window.updateOutputLabel(this,${i},this.value)"
-          placeholder="${ph} ${i+1}">
-      </div>`).join('')}
-      ${addBtn}
-    </div>`;
+ outputInputsHTML = `<div class="output-slot-list">
+  ${labels.map((v,i) => `<div class="output-slot-row">
+    <input type="text" class="output-label-txt" value="${(v||'').replace(/"/g,'&quot;')}"
+      oninput="window.updateOutputLabel(this,${i},this.value)"
+      placeholder="${ph} ${i+1}">
+    <button class="remove-path-btn" title="Remove this path" onclick="event.stopPropagation();window.removeIVROutput(this,${i})">&times;</button>
+  </div>`).join('')}
+  ${addBtn}
+</div>`;
   }
 
   const summary = getConfigSummary(type, configData);
@@ -649,7 +727,7 @@ function addNodeStandalone() {
 function addNodeWithDepth(type, parentId, fromOutputIdx) {
   const label = LABEL_MAP[type] + ' ' + nodeCount[type]++;
   let outputs = 1, inputs = 1;
-  if (type === 'TrackingNumber') { outputs=1; inputs=0; }
+  if (type === 'TrackingNumber') { outputs=1; inputs=1; }
   else if (type === 'IVR')       { outputs=3; inputs=1; }
   else if (type === 'SmartRouter'){ outputs=3; inputs=1; }
   else if (type === 'NoAnswer')  { outputs=1; inputs=1; }
@@ -716,13 +794,30 @@ window.addIVROutput = function(btn) {
   const slotList = nodeDiv.querySelector('.output-slot-list');
   const row = document.createElement('div');
   row.className = 'output-slot-row';
+  let pl = (node.data.type === 'IVR') ? "Keypress" : "Condition";
   row.innerHTML = `<input type="text" class="output-label-txt" value=""
     oninput="window.updateOutputLabel(this,${newIdx},this.value)"
-    placeholder="Keypress ${newIdx+1}">`;
+    placeholder="${pl} ${newIdx+1}">
+    <button class="remove-path-btn" title="Remove this path"
+      onclick="event.stopPropagation();window.removeIVROutput(this,${newIdx})">&times;</button>`;
   slotList.insertBefore(row, btn);
   editor.updateConnectionNodes('node-'+nodeId);
 };
+window.removeIVROutput = function(btn, idx) {
+  const nodeDiv = btn.closest('.drawflow-node');
+  const nodeId = parseInt(nodeDiv.id.replace('node-', ''));
+  const node = editor.getNodeFromId(nodeId);
+  if (!node || !node.data || !node.data.outputLabels) return;
+  node.data.outputLabels.splice(idx, 1);
+  if (typeof editor.removeNodeOutput === 'function') {
+    editor.removeNodeOutput(nodeId, "output_" + (idx + 1));
+  }
+  editor.updateNodeDataFromId(nodeId, node.data);
 
+  // Remove only this row from the DOM to match UI immediately
+  const row = btn.closest('.output-slot-row');
+  if (row) row.remove();
+};
 window.editLabel = function(span) {
   const old = span.textContent;
   const inp = document.createElement('input');
@@ -1317,21 +1412,51 @@ editor.on('import', function() {
     const data = editor.drawflow.drawflow.Home.data;
     Object.values(data).forEach(n => {
       const el = document.getElementById('node-'+n.id);
-      if (el && n.data && n.data.type) el.setAttribute('data-node', n.data.type);
+      if (el && n.data && n.data.type) {
+        el.setAttribute('data-node', n.data.type);
+        // Properly build node HTML immediately after import
+        const content = el.querySelector('.drawflow_content_node');
+        if (content) {
+          content.innerHTML = buildNodeHTML(
+            n.data.type,
+            n.data.label,
+            n.data.outputLabels,
+            n.data.notesValue,
+            n.data.config,
+            n.data.endActions
+          );
+        }
+      }
     });
-  }, 80);
+  }, 100);
 });
 
 // ─────────────────────────────────────────────
 // Save / Load
 // ─────────────────────────────────────────────
 function saveFlow() {
+  // Update each node's HTML from up-to-date .data before export!
+  const data = editor.drawflow.drawflow.Home.data;
+  Object.values(data).forEach(n => {
+    n.html = buildNodeHTML(
+      n.data.type,
+      n.data.label,
+      n.data.outputLabels,
+      n.data.notesValue,
+      n.data.config,
+      n.data.endActions
+    );
+  });
+
   const flow = editor.export();
   const blob = new Blob([JSON.stringify(flow,null,2)],{type:'application/json'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   const d = new Date();
-  a.download = `ctm_routing_${d.getFullYear()}-${d.getMonth()+1}-${d.getDate()}.json`;
+  let fname = prompt('Enter file name for export:', `ctm_routing_${d.getFullYear()}-${d.getMonth()+1}-${d.getDate()}`);
+  if (!fname) fname = `ctm_routing_${d.getFullYear()}-${d.getMonth()+1}-${d.getDate()}`;
+  if (!fname.endsWith('.json')) fname += '.json';
+  a.download = fname;
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
 }
 function loadFlow() {
@@ -2109,21 +2234,79 @@ async function fetchAndImportCTM() {
 }
 
 function handleFile(evt) {
-  const file = evt.target.files[0]; if(!file) return;
+  const file = evt.target.files[0]; if (!file) return;
   const reader = new FileReader();
   reader.onload = e => {
     try {
       const obj = JSON.parse(e.target.result);
       for (const k in obj.drawflow.Home.data) {
         const n = obj.drawflow.Home.data[k];
-        if (typeof n.name !== 'string') n.name = String(n.name||'');
+        if (typeof n.name !== 'string') n.name = String(n.name || '');
       }
       editor.clear();
       editor.import(obj);
-    } catch(ex) { alert('Failed to load: '+ex); }
+
+      // Restore custom node data to config/UI after import
+      setTimeout(() => {
+        const dataMap = obj.drawflow.Home.data;
+        for (const k in dataMap) {
+          const cfg = dataMap[k];
+          if (cfg && cfg.data) {
+            updateNodeConfig(parseInt(k), cfg.data);
+          }
+          setTimeout(() => {
+            const el = document.getElementById('node-' + k);
+            if (el && el.querySelector('.drawflow_content_node') && cfg && cfg.data) {
+              el.querySelector('.drawflow_content_node').innerHTML = buildNodeHTML(
+                cfg.data.type,
+                cfg.data.label,
+                cfg.data.outputLabels,
+                cfg.data.notesValue,
+                cfg.data.config,
+                cfg.data.endActions
+              );
+            }
+          }, 100);
+        }
+      }, 100);
+      console.log('Ready to import object:', obj);
+    } catch (ex) { alert('Failed to load: ' + ex); }
   };
   reader.readAsText(file);
 }
+
+function updateNodeConfig(nodeId, data) {
+  const node = editor.getNodeFromId(nodeId);
+  if (!node || !data) return;
+  node.data = { ...data };
+  // Rebuild node HTML from latest data
+  const html = buildNodeHTML(
+    node.data.type,
+    node.data.label,
+    node.data.outputLabels,
+    node.data.notesValue,
+    node.data.config,
+    node.data.endActions
+  );
+  // Update Drawflow's internal HTML representation and trigger redraw
+  node.html = html;
+  if (editor.drawflow && editor.drawflow.drawflow && editor.drawflow.drawflow.Home && editor.drawflow.drawflow.Home.data[nodeId]) {
+    editor.drawflow.drawflow.Home.data[nodeId].html = html;
+  }
+  // Ensure the data update is in sync
+  editor.updateNodeDataFromId(nodeId, node.data);
+  // For some Drawflow builds, you may also need this:
+  if (typeof editor.updateNodeHtmlFromId === 'function') {
+    editor.updateNodeHtmlFromId(nodeId);
+  }
+  // Optionally refresh external config panels if needed
+  if (typeof refreshConfigPanel === 'function') refreshConfigPanel(nodeId);
+}
+window.saveFlow = saveFlow;
+window.loadFlow = loadFlow;
+window.addNodeStandalone = addNodeStandalone;
+window.autoArrange = autoArrange;
+window.generatePythonScript = generatePythonScript;
 </script>
 </body>
 </html>
